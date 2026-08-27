@@ -20,10 +20,10 @@ const SUMMON_COST := 2
 const PLAYER_MAX_HP := 72
 
 const CARD_DATA := {
-	"attack": {"title": "斩纸", "cost": 1, "damage": 4, "color": Color("d3a44b"), "key": "1"},
-	"shatter": {"title": "还刃", "cost": 3, "damage": 12, "bonus": 6, "color": Color("bd3d45"), "key": "2"},
-	"guard": {"title": "镇煞", "cost": 2, "damage": 6, "stagger": 0.35, "color": Color("43a9b2"), "key": "3"},
-	"shift": {"title": "续灯", "cost": 2, "heal": 7, "color": Color("6d9663"), "key": "4"},
+	"attack": {"title": "斩纸", "class": "斩", "cost": 1, "damage": 4, "color": Color("d3a44b"), "key": "1"},
+	"shatter": {"title": "还刃", "class": "斩", "cost": 3, "damage": 12, "bonus": 6, "color": Color("bd3d45"), "key": "2"},
+	"guard": {"title": "镇煞", "class": "御", "cost": 2, "damage": 6, "stagger": 0.35, "color": Color("43a9b2"), "key": "3"},
+	"shift": {"title": "续灯", "class": "佑", "cost": 2, "heal": 7, "color": Color("6d9663"), "key": "4"},
 }
 
 const INTENTS := [
@@ -58,6 +58,7 @@ var queued_defense := DefenseGrade.NONE
 var defense_cooldown := 0.0
 var stagger_remaining := 0.0
 var perfect_charge := false
+var perfects := 0
 var recovery_remaining := 0.0
 var battle_generation := 0
 var hand: Array[String] = []
@@ -81,6 +82,7 @@ func restart() -> void:
 	defense_cooldown = 0.0
 	stagger_remaining = 0.0
 	perfect_charge = false
+	perfects = 0
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
 	battle_seed = 20260828 + battle_generation
@@ -233,6 +235,10 @@ func _attempt_defense() -> Array:
 	if defense_cooldown > 0.0:
 		events.append({"type": "defense_blocked"})
 		return events
+	if current_intent.id == "green":
+		defense_cooldown = MISS_COOLDOWN
+		events.append({"type": "defense_miss", "unblockable": true})
+		return events
 	var time_to_impact := _current_impact_time() - attack_elapsed
 	var success_window: float = current_intent.window
 	if time_to_impact >= 0.0 and time_to_impact <= success_window:
@@ -267,6 +273,7 @@ func _resolve_impact(events: Array) -> void:
 		DefenseGrade.PERFECT:
 			points = mini(MAX_POINTS, points + 2)
 			perfect_charge = true
+			perfects += 1
 			events.append({"type": "impact", "grade": grade, "points": 2})
 			events.append({"type": "points_changed"})
 			if current_intent.id == "blue" and strike_index < int(current_intent.strikes.size()) - 1:
@@ -302,13 +309,18 @@ func _play_card(id: String) -> Array:
 			enemy_hp -= int(data.damage)
 			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
 		"shatter":
-			var total := int(data.damage) + (int(data.bonus) if perfect_charge else 0)
+			var in_stagger_window := state == BattleState.RESOLVING or stagger_remaining > 0.0
+			var charged := perfect_charge and in_stagger_window
+			var total := int(data.damage) + (int(data.bonus) if charged else 0)
 			perfect_charge = false
 			enemy_hp -= total
-			events.append({"type": "card_played", "id": id, "damage": total, "charged": total > int(data.damage)})
+			events.append({"type": "card_played", "id": id, "damage": total, "charged": charged})
 		"guard":
 			enemy_hp -= int(data.damage)
-			if state == BattleState.WINDUP:
+			if state == BattleState.WINDUP and current_intent.id == "green" and fake_released:
+				_finish_action(events)
+				events.append({"type": "grab_cancelled"})
+			elif state == BattleState.WINDUP:
 				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + float(data.stagger))
 				events.append({"type": "stagger", "duration": float(data.stagger)})
 			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
@@ -347,4 +359,5 @@ func _begin_attack() -> void:
 	blue_cue_index = -1
 	queued_defense = DefenseGrade.NONE
 	stagger_remaining = 0.0
+	perfect_charge = false
 	current_intent = INTENTS[attack_index % INTENTS.size()]

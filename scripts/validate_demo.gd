@@ -103,12 +103,17 @@ func _run() -> void:
 	_check("green_attack_starts_automatically", await _wait_for_attack(2, 0.0))
 	_check("green_reveal_reached", await _wait_for_attack(2, float(demo.sim.current_intent.duration) - 0.18))
 	_check("green_grab_replaces_fake_blade", demo.ghost_hand.visible and demo.ghost_hand.scale.x > 0.7 and not demo.attack_trail.visible)
-	await _capture("06_green_grab_reveal")
-	_check("green_perfect_window_reached", await _wait_for_attack(2, float(demo.sim.current_intent.duration) - 0.07))
-	await _send_key(KEY_SPACE)
-	_check("green_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.PERFECT)
-	_check("green_impact_resolves", await _wait_until(func(): return demo.sim.state == demo.sim.BattleState.RESOLVING))
-	_check("green_perfect_grants_points", demo.sim.points == 2 and demo.sim.player_hp == 72)
+	var guard_slot: int = demo.sim.hand.find("guard")
+	if guard_slot != -1 and demo.sim.points >= 2:
+		await _send_key(KEY_1 + guard_slot)
+		_check("guard_cancels_grab", demo.sim.state == demo.sim.BattleState.RESOLVING and demo.sim.player_hp == 72)
+		await _capture("06_green_grab_interrupted")
+	else:
+		await _capture("06_green_grab_reveal")
+		await _send_key(KEY_SPACE)
+		_check("green_unblockable", demo.sim.queued_defense == demo.sim.DefenseGrade.NONE and demo.sim.defense_cooldown > 0.5)
+		_check("green_grab_resolves", await _wait_until(func(): return demo.sim.state == demo.sim.BattleState.RESOLVING))
+		_check("green_grab_deals_damage", demo.sim.player_hp < 72)
 
 	_write_report()
 	print("VISUAL_TEST_%s: %d checks, %d captures -> %s" % ["OK" if all_ok else "FAILED", checks.size(), captures.size(), ProjectSettings.globalize_path(OUTPUT_DIR)])
