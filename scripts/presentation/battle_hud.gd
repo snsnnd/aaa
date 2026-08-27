@@ -35,6 +35,8 @@ func setup(s: BattleSimulationScript, command_cb: Callable, restart_cb: Callable
 	command = command_cb
 	_build_status()
 	hand_view = HandViewScript.new()
+	hand_view.position = Vector2(0, 540)
+	hand_view.size = Vector2(1280, 180)
 	add_child(hand_view)
 	hand_view.setup(s, command_cb)
 	menu_overlay = MenuOverlayScript.new()

@@ -24,6 +24,9 @@ const CARD_DATA := {
 	"shatter": {"title": "还刃", "class": "斩", "cost": 3, "damage": 12, "bonus": 6, "color": Color("bd3d45"), "key": "2"},
 	"guard": {"title": "镇煞", "class": "御", "cost": 2, "damage": 6, "stagger": 0.35, "color": Color("43a9b2"), "key": "3"},
 	"shift": {"title": "续灯", "class": "佑", "cost": 2, "heal": 7, "color": Color("6d9663"), "key": "4"},
+	"duannian": {"title": "断念", "class": "斩", "cost": 2, "damage": 8, "discard_random": true, "color": Color("c98862"), "key": ""},
+	"dengxin": {"title": "灯芯", "class": "佑", "cost": 1, "heal": 4, "color": Color("8fae72"), "key": ""},
+	"zhuangzhong": {"title": "撞钟", "class": "斩", "cost": 2, "damage": 5, "stagger": 0.2, "color": Color("b0925c"), "key": ""},
 }
 
 const INTENTS := [
@@ -66,6 +69,7 @@ var draw_pile: Array[String] = []
 var discard_pile: Array[String] = []
 var rng_state := 0
 var battle_seed := 0
+var deck_config: Array[String] = []
 var current_intent: Dictionary = INTENTS[0]
 
 
@@ -109,7 +113,8 @@ func _shuffle(pile: Array[String]) -> void:
 
 func _setup_deck() -> void:
 	hand.clear()
-	draw_pile = Array(STARTING_DECK.duplicate(), TYPE_STRING, "", null)
+	var source: Array = deck_config if not deck_config.is_empty() else STARTING_DECK
+	draw_pile = Array(source.duplicate(), TYPE_STRING, "", null)
 	discard_pile.clear()
 	_shuffle(draw_pile)
 	_draw_to_hand()
@@ -321,6 +326,21 @@ func _play_card(id: String) -> Array:
 				_finish_action(events)
 				events.append({"type": "grab_cancelled"})
 			elif state == BattleState.WINDUP:
+				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + float(data.stagger))
+				events.append({"type": "stagger", "duration": float(data.stagger)})
+			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
+		"duannian":
+			enemy_hp -= int(data.damage)
+			var others: Array[String] = hand.filter(func(cid: String): return cid != id)
+			if not others.is_empty():
+				var victim: String = others[int(_next_rand() * float(others.size()))]
+				hand.erase(victim)
+				discard_pile.append(victim)
+				events.append({"type": "hand_changed"})
+			events.append({"type": "card_played", "id": id, "damage": int(data.damage), "discarded": true})
+		"zhuangzhong":
+			enemy_hp -= int(data.damage)
+			if state == BattleState.WINDUP:
 				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + float(data.stagger))
 				events.append({"type": "stagger", "duration": float(data.stagger)})
 			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})

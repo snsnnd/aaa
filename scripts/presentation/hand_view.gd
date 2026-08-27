@@ -30,7 +30,13 @@ func setup(s: BattleSimulationScript, command_cb: Callable) -> void:
 
 func _load_card_textures() -> void:
 	for id in BattleSimulationScript.CARD_DATA:
-		_card_textures[id] = load("res://assets/%s/card_%s.png" % ["demo", id])
+		var demo_path := "res://assets/demo/card_%s.png" % id
+		var tex: Texture2D = null
+		if ResourceLoader.exists(demo_path):
+			tex = load(demo_path)
+		if tex == null:
+			tex = load("res://assets/game/cards/card_%s.png" % id)
+		_card_textures[id] = tex
 
 
 func _build() -> void:

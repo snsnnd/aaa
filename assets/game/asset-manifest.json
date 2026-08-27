@@ -1,0 +1,43 @@
+{
+  "style": "C painterly, procedural",
+  "enemies": {
+    "enemies/barber_ghost.png": "620-720px RGBA",
+    "enemies/gambler_ghost.png": "620-720px RGBA",
+    "enemies/lantern_imp.png": "620-720px RGBA",
+    "enemies/lantern_keeper.png": "620-720px RGBA",
+    "enemies/mortuary_warden.png": "620-720px RGBA",
+    "enemies/paper_apprentice.png": "620-720px RGBA",
+    "enemies/patrol_corpse.png": "620-720px RGBA",
+    "enemies/well_sisters.png": "620-720px RGBA"
+  },
+  "cards": {
+    "cards/card_anhun.png": "320x320 RGBA, class frame",
+    "cards/card_baiguyin.png": "320x320 RGBA, class frame",
+    "cards/card_changming.png": "320x320 RGBA, class frame",
+    "cards/card_dengxin.png": "320x320 RGBA, class frame",
+    "cards/card_difan.png": "320x320 RGBA, class frame",
+    "cards/card_duannian.png": "320x320 RGBA, class frame",
+    "cards/card_fuhunsuo.png": "320x320 RGBA, class frame",
+    "cards/card_huanchi.png": "320x320 RGBA, class frame",
+    "cards/card_jiedao.png": "320x320 RGBA, class frame",
+    "cards/card_jieshi.png": "320x320 RGBA, class frame",
+    "cards/card_jieshou.png": "320x320 RGBA, class frame",
+    "cards/card_jinshen.png": "320x320 RGBA, class frame",
+    "cards/card_liebo.png": "320x320 RGBA, class frame",
+    "cards/card_podan.png": "320x320 RGBA, class frame",
+    "cards/card_shoulian.png": "320x320 RGBA, class frame",
+    "cards/card_shuangdeng.png": "320x320 RGBA, class frame",
+    "cards/card_tianping.png": "320x320 RGBA, class frame",
+    "cards/card_tianyou.png": "320x320 RGBA, class frame",
+    "cards/card_tongjing.png": "320x320 RGBA, class frame",
+    "cards/card_wenlu.png": "320x320 RGBA, class frame",
+    "cards/card_xudeng.png": "320x320 RGBA, class frame",
+    "cards/card_xuezhang.png": "320x320 RGBA, class frame",
+    "cards/card_yuangui.png": "320x320 RGBA, class frame",
+    "cards/card_zhensha.png": "320x320 RGBA, class frame",
+    "cards/card_zhima.png": "320x320 RGBA, class frame",
+    "cards/card_zhizhi.png": "320x320 RGBA, class frame",
+    "cards/card_zhuangzhong.png": "320x320 RGBA, class frame",
+    "cards/card_zhuying.png": "320x320 RGBA, class frame"
+  }
+}
