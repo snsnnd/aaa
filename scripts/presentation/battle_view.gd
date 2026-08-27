@@ -23,6 +23,7 @@ var card_audio: AudioStreamPlayer
 var warning_audio: AudioStreamPlayer
 var animation_time := 0.0
 var hitstop_running := false
+var loaded_enemy := ""
 
 var shake_enabled: bool:
 	get:
@@ -134,6 +135,9 @@ func hit_stop(duration: float, time_scale: float) -> void:
 
 
 func apply_attack_presentation() -> void:
+	if sim.enemy_id != loaded_enemy:
+		loaded_enemy = sim.enemy_id
+		enemy_anim.load_enemy_texture(loaded_enemy)
 	enemy_anim.apply_presentation()
 
 

@@ -89,10 +89,15 @@ func _create_ghost_hand() -> Node2D:
 
 
 func load_style(folder: String) -> void:
-	enemy_sprite.texture = load("res://assets/%s/enemy_watchman.png" % folder)
 	weapon_sprite.texture = load("res://assets/%s/enemy_blade.png" % folder)
-	enemy_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	load_enemy_texture("watchman")
+
+
+func load_enemy_texture(id: String) -> void:
+	var path := "res://assets/demo/enemy_watchman.png" if id == "watchman" else "res://assets/game/enemies/%s.png" % id
+	enemy_sprite.texture = load(path)
+	enemy_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func sim() -> BattleSimulationScript:
@@ -203,8 +208,8 @@ func _update_attack_visuals() -> void:
 	match String(s.current_intent.id):
 		"red":
 			_red_slow_blade(ratio)
-		"blue":
-			_blue_combo(ratio)
+		"blue", "quick":
+			_strike_combo(ratio)
 		"green":
 			_green_grab(ratio)
 
@@ -235,11 +240,13 @@ func _red_slow_blade(ratio: float) -> void:
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
-func _blue_combo(ratio: float) -> void:
+func _strike_combo(ratio: float) -> void:
 	var s := sim()
-	var strike_time := 0.82 if s.strike_index == 0 else 1.56
-	var start_time := 0.0 if s.strike_index == 0 else 0.82
-	var reach := 380.0 if s.strike_index == 0 else 420.0
+	var strikes: Array = s.current_intent.strikes
+	var idx: int = clampi(s.strike_index, 0, strikes.size() - 1)
+	var strike_time := float(strikes[idx])
+	var start_time := 0.0 if idx == 0 else float(strikes[idx - 1])
+	var reach := 340.0 + 40.0 * float(idx)
 	var phase := clampf((s.attack_elapsed - start_time) / (strike_time - start_time), 0.0, 1.0)
 	var commit := clampf((phase - 0.56) / 0.44, 0.0, 1.0)
 	if phase < 0.56:

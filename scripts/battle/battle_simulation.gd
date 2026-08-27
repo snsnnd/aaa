@@ -29,23 +29,62 @@ const CARD_DATA := {
 	"zhuangzhong": {"title": "撞钟", "class": "斩", "cost": 2, "damage": 5, "stagger": 0.2, "color": Color("b0925c"), "key": ""},
 }
 
-const INTENTS := [
-	{
-		"id": "red", "title": "赤·嗔  蓄势慢刀",
-		"duration": 2.8, "damage": 16, "window": 0.30, "fake_time": 1.25,
-		"color": Color("bd3d45"),
+## 敌招阶段表：每招一段可学习的时间线。unblockable 招不可防范。
+const MOVES := {
+	"red": {
+		"id": "red", "title": "蓄势慢刀", "duration": 2.8, "damage": 16,
+		"window": 0.30, "fake": 1.25, "color": Color("bd3d45"),
+		"phases": [
+			{"name": "raise", "until": 1.00},
+			{"name": "hold", "until": 1.90, "cue": true},
+			{"name": "commit", "until": 2.80, "cue": true},
+			{"name": "recover", "until": 3.42},
+		],
 	},
-	{
-		"id": "blue", "title": "碧·痴  变拍二连",
-		"duration": 2.05, "damage": 7, "window": 0.20,
-		"strikes": [0.82, 1.56], "color": Color("43a9b2"),
+	"blue": {
+		"id": "blue", "title": "变拍二连", "duration": 2.05, "damage": 7,
+		"window": 0.20, "strikes": [0.82, 1.56], "color": Color("43a9b2"),
+		"phases": [
+			{"name": "raise", "until": 0.69},
+			{"name": "commit", "until": 0.82, "cue": true},
+			{"name": "reset", "until": 1.43},
+			{"name": "commit", "until": 1.56, "cue": true},
+			{"name": "recover", "until": 2.26},
+		],
 	},
-	{
-		"id": "green", "title": "青·疑  佯攻擒拿",
-		"duration": 1.9, "damage": 18, "window": 0.34, "fake_time": 0.78,
-		"color": Color("6d9663"),
+	"green": {
+		"id": "green", "title": "佯攻擒拿", "duration": 1.9, "damage": 18,
+		"window": 0.34, "fake": 0.78, "unblockable": true, "color": Color("6d9663"),
+		"phases": [
+			{"name": "feint", "until": 0.79},
+			{"name": "reveal", "until": 1.14, "cue": true},
+			{"name": "reach", "until": 1.90},
+			{"name": "recover", "until": 2.52},
+		],
 	},
-]
+	"quick": {
+		"id": "quick", "title": "疾斩", "duration": 1.0, "damage": 9,
+		"window": 0.22, "strikes": [0.90], "color": Color("d0a45c"),
+		"phases": [
+			{"name": "raise", "until": 0.55},
+			{"name": "commit", "until": 0.90, "cue": true},
+			{"name": "recover", "until": 1.32},
+		],
+	},
+}
+
+## 敌人表：名称、血量、招式轮换（永不 RNG 抖动）。
+const ENEMIES := {
+	"watchman": {"name": "前任更夫", "hp": 46, "moves": ["red", "blue", "green"], "opening": "red"},
+	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "moves": ["quick", "green", "red"], "opening": "quick", "reactive": true},
+	"patrol_corpse": {"name": "更练尸", "hp": 38, "moves": ["blue", "red"], "opening": "blue", "reactive": true},
+	"barber_ghost": {"name": "剃头匠", "hp": 34, "moves": ["blue", "quick"], "opening": "blue", "reactive": true},
+	"paper_apprentice": {"name": "纸扎学徒", "hp": 30, "moves": ["red", "green"], "opening": "red", "reactive": true},
+	"well_sisters": {"name": "井中姐弟", "hp": 36, "moves": ["blue", "green"], "opening": "blue", "reactive": true},
+	"gambler_ghost": {"name": "赌鬼", "hp": 34, "moves": ["quick", "blue", "red"], "opening": "quick", "reactive": true},
+	"mortuary_warden": {"name": "义庄看守", "hp": 52, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
+	"lantern_keeper": {"name": "守灯人", "hp": 66, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
+}
 
 var state: BattleState = BattleState.WINDUP
 var player_hp := PLAYER_MAX_HP
@@ -70,7 +109,12 @@ var discard_pile: Array[String] = []
 var rng_state := 0
 var battle_seed := 0
 var deck_config: Array[String] = []
-var current_intent: Dictionary = INTENTS[0]
+var enemy_id := "watchman"
+var enemy_name := "前任更夫"
+var enemy_max_hp := 46
+var last_move_id := ""
+var was_last_perfect := false
+var current_intent: Dictionary = {}
 
 
 func _init() -> void:
@@ -80,13 +124,15 @@ func _init() -> void:
 func restart() -> void:
 	battle_generation += 1
 	player_hp = PLAYER_MAX_HP
-	enemy_hp = 46
+	enemy_hp = int(ENEMIES[enemy_id].hp)
 	points = 0
 	attack_index = 0
 	defense_cooldown = 0.0
 	stagger_remaining = 0.0
 	perfect_charge = false
 	perfects = 0
+	last_move_id = ""
+	was_last_perfect = false
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
 	battle_seed = 20260828 + battle_generation
@@ -227,7 +273,7 @@ func _collect_cue_events(events: Array) -> void:
 
 
 func _collect_fake_events(events: Array) -> void:
-	var fake_time: float = current_intent.get("fake_time", -1.0)
+	var fake_time: float = current_intent.get("fake", -1.0)
 	if fake_time >= 0.0 and not fake_released and attack_elapsed >= fake_time:
 		fake_released = true
 		events.append({"type": "fake_release", "intent": current_intent.id})
@@ -240,7 +286,7 @@ func _attempt_defense() -> Array:
 	if defense_cooldown > 0.0:
 		events.append({"type": "defense_blocked"})
 		return events
-	if current_intent.id == "green":
+	if bool(current_intent.get("unblockable", false)):
 		defense_cooldown = MISS_COOLDOWN
 		events.append({"type": "defense_miss", "unblockable": true})
 		return events
@@ -258,6 +304,40 @@ func _attempt_defense() -> Array:
 	return events
 
 
+func _pick_reactive(enemy: Dictionary) -> String:
+	var pool: Array = enemy.moves
+	if pool.size() == 1:
+		return String(pool[0])
+	var weights: Array[float] = []
+	var total := 0.0
+	for mid in pool:
+		var w := _move_weight(String(mid))
+		weights.append(w)
+		total += w
+	var roll := _next_rand() * total
+	for i in pool.size():
+		roll -= weights[i]
+		if roll <= 0.0:
+			return String(pool[i])
+	return String(pool[pool.size() - 1])
+
+
+func _move_weight(mid: String) -> float:
+	var move: Dictionary = MOVES[mid]
+	var w := 1.0
+	if String(mid) == last_move_id:
+		w = 0.0
+	if bool(move.get("unblockable", false)) and points >= 6:
+		w += 0.9
+	if int(move.damage) >= 12 and player_hp <= 24:
+		w += 0.6
+	if float(move.window) <= 0.22 and was_last_perfect:
+		w += 0.5
+	if enemy_hp < int(ENEMIES[enemy_id].hp) / 2 and int(move.damage) >= 12:
+		w += 0.4
+	return w
+
+
 func _current_impact_time() -> float:
 	if current_intent.id == "blue":
 		var strikes: Array = current_intent.strikes
@@ -269,6 +349,7 @@ func _current_impact_time() -> float:
 func _resolve_impact(events: Array) -> void:
 	var grade: int = queued_defense
 	queued_defense = DefenseGrade.NONE
+	was_last_perfect = grade == DefenseGrade.PERFECT
 	match grade:
 		DefenseGrade.SUCCESS:
 			points = mini(MAX_POINTS, points + 1)
@@ -322,7 +403,7 @@ func _play_card(id: String) -> Array:
 			events.append({"type": "card_played", "id": id, "damage": total, "charged": charged})
 		"guard":
 			enemy_hp -= int(data.damage)
-			if state == BattleState.WINDUP and current_intent.id == "green" and fake_released:
+			if state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
 				_finish_action(events)
 				events.append({"type": "grab_cancelled"})
 			elif state == BattleState.WINDUP:
@@ -380,4 +461,13 @@ func _begin_attack() -> void:
 	queued_defense = DefenseGrade.NONE
 	stagger_remaining = 0.0
 	perfect_charge = false
-	current_intent = INTENTS[attack_index % INTENTS.size()]
+	var enemy: Dictionary = ENEMIES[enemy_id]
+	var move_id: String
+	if attack_index == 0 or not bool(enemy.get("reactive", false)):
+		move_id = String(enemy.moves[attack_index % enemy.moves.size()])
+	else:
+		move_id = _pick_reactive(enemy)
+	last_move_id = move_id
+	current_intent = MOVES[move_id].duplicate()
+	enemy_name = String(enemy.name)
+	enemy_max_hp = int(enemy.hp)

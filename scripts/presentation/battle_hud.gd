@@ -98,7 +98,7 @@ func _build_status() -> void:
 
 func refresh() -> void:
 	player_status.text = "执灯人｜灯油 %d / %d" % [sim.player_hp, BattleSimulationScript.PLAYER_MAX_HP]
-	enemy_status.text = "前任更夫｜怨气 %d / 46" % maxi(0, sim.enemy_hp)
+	enemy_status.text = "%s｜怨气 %d / %d" % [sim.enemy_name, maxi(0, sim.enemy_hp), sim.enemy_max_hp]
 	resource_status.text = "还愿 %d / %d    第 %d 招" % [sim.points, BattleSimulationScript.MAX_POINTS, sim.attack_index + 1]
 	hand_view.refresh_slots()
 

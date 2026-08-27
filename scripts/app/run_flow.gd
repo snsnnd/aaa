@@ -16,12 +16,13 @@ const BattleScene := preload("res://scenes/main.tscn")
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const BASE_DECK := ["attack", "attack", "shatter", "guard", "shift"]
 const DRAFT_POOL := ["attack", "shatter", "guard", "shift", "duannian", "dengxin", "zhuangzhong"]
-const NODES := ["battle", "battle", "elite", "battle", "boss"]
+const NODE_TABLE := [["battle", "lantern_imp"], ["battle", "patrol_corpse"], ["elite", "mortuary_warden"], ["battle", "gambler_ghost"], ["boss", "lantern_keeper"]]
 
 var state: State = State.MENU
 var run_deck: Array[String] = []
-var node_queue: Array[String] = []
+var node_queue: Array = []
 var node_name := ""
+var node_enemy := "watchman"
 var last_victory := false
 var draft_options: Array[String] = []
 var rng := RandomNumberGenerator.new()
@@ -84,8 +85,8 @@ func _show_battle() -> void:
 	battle_layer.visible = true
 	battle = BattleScene.instantiate()
 	battle_layer.add_child(battle)
-	battle.sim.deck_config = run_deck.duplicate()
-	node_label.text = {"battle": "第 %d 场" % (NODES.size() - node_queue.size()), "elite": "精英战", "boss": "头目战"}.get(node_name, "")
+	battle.apply_run_config(node_enemy, run_deck.duplicate())
+	node_label.text = {"battle": "第 %d 场" % (NODE_TABLE.size() - node_queue.size()), "elite": "精英战", "boss": "头目战"}.get(node_name, "")
 
 
 func _show_reward() -> void:
@@ -95,7 +96,7 @@ func _show_reward() -> void:
 	for i in 3:
 		var idx := rng.randi_range(0, pool.size() - 1)
 		draft_options.append(pool.pop_at(idx))
-	reward_title.text = "怨契三选一｜第 %d / %d 场后" % [NODES.size() - node_queue.size(), NODES.size()]
+	reward_title.text = "怨契三选一｜第 %d / %d 场后" % [NODE_TABLE.size() - node_queue.size(), NODE_TABLE.size()]
 	for i in 3:
 		var button: Button = reward_layer.get_node("Card%d" % i)
 		var data: Dictionary = BattleSimulationScript.CARD_DATA[draft_options[i]]
@@ -110,7 +111,7 @@ func _show_over() -> void:
 		over_sub.text = "秤砣归位，众怨过河。你走完了三程路。" if node_queue.is_empty() else "这一夜，到这里为止。"
 	else:
 		over_title.text = "灯 灭 了"
-		over_sub.text = "第 %d 场，执灯人倒在了更路上。" % (NODES.size() - node_queue.size())
+		over_sub.text = "第 %d 场，执灯人倒在了更路上。" % (NODE_TABLE.size() - node_queue.size())
 
 
 func _process(_delta: float) -> void:
@@ -140,12 +141,14 @@ func _finish_battle(victory: bool) -> void:
 
 func start_run() -> void:
 	run_deck = BASE_DECK.duplicate()
-	node_queue = NODES.duplicate()
+	node_queue = NODE_TABLE.duplicate()
 	_advance_node()
 
 
 func _advance_node() -> void:
-	node_name = node_queue.pop_front()
+	var node: Array = node_queue.pop_front()
+	node_name = String(node[0])
+	node_enemy = String(node[1])
 	_enter(State.BATTLE)
 
 

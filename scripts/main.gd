@@ -251,6 +251,19 @@ func _present_battle_end(victory: bool) -> void:
 	get_tree().create_timer(1.3, true, false, true).timeout.connect(func(): hud.show_settlement(victory))
 
 
+func apply_run_config(enemy_id: String, deck: Array) -> void:
+	sim.enemy_id = enemy_id
+	var deck_copy: Array[String] = []
+	for id in deck:
+		deck_copy.append(String(id))
+	sim.deck_config = deck_copy
+	sim.restart()
+	_apply_attack_presentation()
+	hud.rebuild_hand()
+	hud.rebuild_pile_view()
+	hud.refresh()
+
+
 func _restart_battle() -> void:
 	hud.close_menu()
 	hud.hide_settlement()
@@ -334,7 +347,17 @@ func _run_smoke_test() -> void:
 	else:
 		s.step(1.0)
 		assert(s.player_hp == BattleSimulationScript.PLAYER_MAX_HP - 18)
-	print("SMOKE_TEST_OK: simulation, unblockable grab, stagger window, cards, and summons")
+	var s2 := BattleSimulationScript.new()
+	s2.enemy_id = "lantern_imp"
+	s2.restart()
+	assert(s2.current_intent.id == "quick" and s2.enemy_name == "灯笼小鬼" and s2.enemy_hp == 30)
+	s2.points = 9
+	s2.attack_index = 1
+	s2._begin_attack()
+	var picked := String(s2.current_intent.id)
+	assert(picked != "quick" and (picked == "green" or picked == "red"))
+	assert(s2._move_weight(picked) == 0.0 and s2._move_weight("quick") >= 1.0)
+	print("SMOKE_TEST_OK: simulation, unblockable grab, stagger window, cards, summons, reactive enemies")
 	s.battle_generation += 1
 	await get_tree().create_timer(0.4, true, false, true).timeout
 	for tween in get_tree().get_processed_tweens():
