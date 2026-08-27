@@ -183,8 +183,12 @@ func guard_arc(color := Color("f2d487")) -> void:
 	vfx.guard_arc(color)
 
 
-func paper_burst() -> void:
-	vfx.paper_burst()
+func paper_burst(tint := Color("e8d9a8")) -> void:
+	vfx.paper_burst(tint)
+
+
+func bell_wave() -> void:
+	vfx.bell_wave()
 
 
 func counter_slash(charged: bool) -> void:

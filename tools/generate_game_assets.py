@@ -62,14 +62,14 @@ def make_lantern_imp() -> None:
     draw.ellipse((190, 240, 370, 470), fill=INK)
     draw.ellipse((225, 175, 335, 285), fill=INK)
     eyes(draw, 280, 225, 26, "#f2a03c", 9)
-    for arm_x, tip in [(150, (96, 380)), (410, (464, 380))]:
-        draw.line((230 if arm_x < 280 else 330, 330, arm_x, tip[1]), fill=INK, width=22)
+    draw.line((230, 330, 150, 386), fill=INK, width=22)
+    draw.line((330, 330, 424, 386), fill=INK, width=22)
     draw.rounded_rectangle((96, 380, 176, 470), radius=12, fill="#d98729", outline="#120d0b", width=8)
     draw.line((136, 388, 136, 462), fill="#3a2119", width=5)
-    draw.line((392, 372, 464, 372), fill="#57493a", width=8)
-    draw.ellipse((430, 336, 498, 408), fill="#3c3128", outline="#201a14", width=6)
+    draw.line((136, 388, 136, 372), fill="#57493a", width=6)
+    draw.rounded_rectangle((392, 386, 452, 456), radius=10, fill="#b06f24", outline="#120d0b", width=7)
+    draw.line((422, 394, 422, 448), fill="#3a2119", width=4)
     robe(draw, 280, 470, 600, 120, lean=0)
-    draw.line((258, 250, 232, 470), fill=(242, 160, 60, 150), width=6)
     image = grain(image)
     image.save(OUT / "enemies/lantern_imp.png", optimize=True)
 
@@ -166,7 +166,7 @@ def make_gambler_ghost() -> None:
     image = glow(image, (310, 300), 180, (170, 130, 60), 84)
     draw = ImageDraw.Draw(image)
     draw.ellipse((244, 160, 376, 298), fill="#101216")
-    draw.polygon([(250, 128), (370, 128), (344, 94), (276, 94)], fill=INK)
+    hat(draw, 310, 162, 96, "#6a5a2f")
     eyes(draw, 310, 224, 24, "#e0b45c", 9)
     robe(draw, 310, 298, 742, 148)
     draw.polygon([(236, 340), (150, 560), (232, 520), (268, 368)], fill="#1d1a14")
@@ -203,10 +203,13 @@ def make_mortuary_warden() -> None:
     for y in [500, 560, 620]:
         draw.line((500, y, 654, y), fill="#57493a", width=8)
     draw.line((286, 340, 176, 520), fill=INK, width=26)
-    for i in range(6):
-        a = 0.6 + i * 0.42
-        x, y = 176 + int(math.cos(a) * 60), 520 + int(math.sin(a) * 60)
-        draw.arc((x - 26, y - 26, x + 26, y + 26), 0, 360, fill="#57493a", width=8)
+    chain_x, chain_y = 176, 520
+    for i in range(7):
+        a = 0.35 + i * 0.38
+        chain_x += int(math.cos(a) * 44)
+        chain_y += int(math.sin(a) * 34)
+        draw.arc((chain_x - 24, chain_y - 24, chain_x + 24, chain_y + 24), 0, 360, fill="#57493a", width=9)
+    draw.ellipse((chain_x - 16, chain_y - 16, chain_x + 16, chain_y + 16), fill="#2a2118", outline="#14100c", width=6)
     image = grain(image)
     image.save(OUT / "enemies/mortuary_warden.png", optimize=True)
 
@@ -223,8 +226,8 @@ def make_lantern_keeper() -> None:
     robe(draw, 370, 308, 826, 190)
     draw.polygon([(300, 360), (220, 760), (316, 700), (352, 386)], fill="#5a2a24")
     draw.polygon([(440, 360), (520, 760), (424, 700), (388, 386)], fill="#5a2a24")
-    draw.line((498, 330, 588, 210), fill=INK, width=26)
-    draw.line((588, 210, 588, 150), fill="#57493a", width=10)
+    draw.line((498, 330, 596, 150), fill="#57493a", width=14)
+    draw.line((588, 150, 588, 126), fill="#57493a", width=10)
     draw.rounded_rectangle((528, 150, 648, 320), radius=22, fill="#d98729", outline="#120d0b", width=12)
     draw.line((588, 158, 588, 312), fill="#3a2119", width=8)
     draw.line((534, 236, 642, 236), fill="#3a2119", width=8)

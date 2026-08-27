@@ -43,7 +43,7 @@ func guard_arc(color := Color("f2d487")) -> void:
 	tw.chain().tween_callback(arc.queue_free)
 
 
-func paper_burst() -> void:
+func paper_burst(tint := Color("e8d9a8")) -> void:
 	var burst := Node2D.new()
 	burst.position = enemy_pos(Vector2(-30, -20))
 	burst.z_index = 12
@@ -51,7 +51,7 @@ func paper_burst() -> void:
 	for i in 6:
 		var shard := Polygon2D.new()
 		shard.polygon = PackedVector2Array([Vector2(-5, -8), Vector2(6, -6), Vector2(3, 9), Vector2(-7, 6)])
-		shard.color = Color("e8d9a8")
+		shard.color = tint
 		shard.rotation = randf_range(0.0, TAU)
 		burst.add_child(shard)
 		var drift := Vector2(randf_range(-110.0, -30.0), randf_range(-95.0, -20.0))
@@ -65,6 +65,29 @@ func paper_burst() -> void:
 	fade.tween_interval(0.08)
 	fade.tween_property(burst, "modulate:a", 0.0, 0.28)
 	fade.tween_callback(burst.queue_free)
+
+
+func bell_wave() -> void:
+	var wave := Node2D.new()
+	wave.position = enemy_pos(Vector2(-40, -30))
+	wave.z_index = 13
+	add_child(wave)
+	for i in 2:
+		var arc := Line2D.new()
+		var pts := PackedVector2Array()
+		for p in 17:
+			var a := -1.2 + 2.4 * float(p) / 16.0
+			pts.append(Vector2.RIGHT.rotated(a) * (70.0 + i * 34.0))
+		arc.points = pts
+		arc.width = 7.0 - i * 2.0
+		arc.default_color = Color("e0b45c") if i == 0 else Color("fff1bd")
+		wave.add_child(arc)
+	wave.scale = Vector2(0.4, 0.4)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(wave, "scale", Vector2(1.6, 1.6), 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(wave, "modulate:a", 0.0, 0.30)
+	tw.chain().tween_callback(wave.queue_free)
+	fx.trauma = minf(1.0, fx.trauma + 0.22)
 
 
 func counter_slash(charged: bool) -> void:

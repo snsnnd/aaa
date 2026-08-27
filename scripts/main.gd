@@ -216,6 +216,13 @@ func _present_card(event: Dictionary) -> void:
 			view.seal_ring()
 		"shift":
 			view.embers()
+		"duannian":
+			view.paper_burst(Color("c98a7a"))
+		"dengxin":
+			view.embers()
+			view.pulse_glow(0.35)
+		"zhuangzhong":
+			view.bell_wave()
 	if id == "shift":
 		if int(event.healed) > 0:
 			hud.show_message("续灯｜灯油 +%d" % int(event.healed), data.color, 0.7)
