@@ -27,6 +27,7 @@ var timing_label: Label
 var message_label: Label
 var instruction_label: Label
 var defense_button: Button
+var summon_button: Button
 var flash: ColorRect
 var card_buttons: Dictionary = {}
 var slot_titles: Dictionary = {}
@@ -102,6 +103,8 @@ func _handle_shortcut(keycode: Key) -> bool:
 			_play_hand_slot(2)
 		KEY_4:
 			_play_hand_slot(3)
+		KEY_5:
+			_submit({"type": "summon"})
 		KEY_SPACE:
 			_submit({"type": "defend"})
 		KEY_R:
@@ -136,9 +139,21 @@ func _handle_event(event: Dictionary) -> void:
 		"hand_changed":
 			_rebuild_hand_ui()
 			_refresh_ui()
+		"card_summoned":
+			glow_boost = maxf(glow_boost, 0.5)
+			_spawn_summon_vfx(String(event.id))
+			_show_message("召符·%s" % BattleSimulationScript.CARD_DATA[String(event.id)].title, Color("f2d487"), 0.7)
+			_rebuild_hand_ui()
+			_refresh_ui()
+		"summon_rejected":
+			if String(event.get("reason", "")) == "hand_full":
+				_show_message("符位已满", Color("9e8b81"), 0.5)
+			elif String(event.get("reason", "")) == "points":
+				_show_message("愿力不足", Color("c15454"), 0.5)
 		"defense_miss":
 			impulse_x = -20.0
 			impulse_rot = -0.07
+			_spawn_guard_arc(Color("a8564f"))
 			_show_message("架势散乱……", Color("c15454"), 0.6)
 		"impact":
 			_present_impact(event)
@@ -198,7 +213,7 @@ func _present_impact(event: Dictionary) -> void:
 
 
 func _contact_point() -> Vector2:
-	return player_pivot.position + Vector2(122.0, -14.0)
+	return player_pivot.position + Vector2(210.0, -14.0)
 
 
 func _snap_ghost_hand_back() -> void:
@@ -242,7 +257,7 @@ func _present_card(event: Dictionary) -> void:
 	_refresh_ui()
 
 
-func _spawn_guard_arc() -> void:
+func _spawn_guard_arc(color := Color("f2d487")) -> void:
 	var arc := Line2D.new()
 	var pts := PackedVector2Array()
 	for i in 13:
@@ -250,7 +265,7 @@ func _spawn_guard_arc() -> void:
 		pts.append(Vector2.RIGHT.rotated(a) * 86.0)
 	arc.points = pts
 	arc.width = 6.0
-	arc.default_color = Color("f2d487")
+	arc.default_color = color
 	arc.position = player_pivot.position + Vector2(96, -4)
 	arc.z_index = 12
 	add_child(arc)
@@ -320,6 +335,26 @@ func _spawn_seal_ring() -> void:
 	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
 	tw.tween_property(ring, "scale", Vector2(0.45, 0.45), 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_property(ring, "modulate:a", 0.0, 0.42)
+	tw.chain().tween_callback(ring.queue_free)
+
+
+func _spawn_summon_vfx(id: String) -> void:
+	var color: Color = BattleSimulationScript.CARD_DATA[id].color
+	var ring := Line2D.new()
+	var pts := PackedVector2Array()
+	for i in 25:
+		pts.append(Vector2.RIGHT.rotated(TAU * float(i) / 24.0) * 42.0)
+	ring.points = pts
+	ring.width = 5.0
+	ring.default_color = color
+	ring.position = player_pivot.position + Vector2(44, -168)
+	ring.z_index = 14
+	add_child(ring)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(ring, "position", player_pivot.position + Vector2(24, -36), 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(ring, "scale", Vector2(0.3, 0.3), 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(ring, "rotation", randf_range(4.0, 7.0), 0.32)
+	tw.tween_property(ring, "modulate:a", 0.0, 0.14).set_delay(0.2)
 	tw.chain().tween_callback(ring.queue_free)
 
 
@@ -554,7 +589,7 @@ func _build_ui() -> void:
 	bottom.add_theme_stylebox_override("panel", _style_box(Color(0.025, 0.026, 0.035, 0.96), Color("4e3f34"), 0, 2))
 	root.add_child(bottom)
 	instruction_label = _label(Vector2(24, 18), Vector2(246, 142), 16, Color("a9a49b"), false)
-	instruction_label.text = "Space 架势防范\n1-4 消耗还愿出牌\n按空则气息散乱\nR 重新开始"
+	instruction_label.text = "Space 架势防范\n1-4 消耗还愿出牌\n5 召符（2 点）\n按空则气息散乱\nR 重新开始"
 	bottom.add_child(instruction_label)
 
 	for i in 4:
@@ -571,6 +606,18 @@ func _build_ui() -> void:
 	defense_button.add_theme_stylebox_override("disabled", _style_box(Color("17171d"), Color("47434a"), 15, 2))
 	defense_button.pressed.connect(func(): _submit({"type": "defend"}))
 	bottom.add_child(defense_button)
+
+	summon_button = Button.new()
+	summon_button.position = Vector2(905, 12)
+	summon_button.size = Vector2(58, 156)
+	summon_button.focus_mode = Control.FOCUS_NONE
+	summon_button.add_theme_font_size_override("font_size", 18)
+	summon_button.text = "召\n符\n[5]"
+	summon_button.add_theme_stylebox_override("normal", _style_box(Color("241d14"), Color("9a7a3a"), 12, 2))
+	summon_button.add_theme_stylebox_override("hover", _style_box(Color("3a2f1d"), Color("d3a44b"), 12, 3))
+	summon_button.add_theme_stylebox_override("disabled", _style_box(Color("17171d"), Color("47434a"), 12, 2))
+	summon_button.pressed.connect(func(): _submit({"type": "summon"}))
+	bottom.add_child(summon_button)
 
 	flash = ColorRect.new()
 	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1035,6 +1082,7 @@ func _refresh_ui() -> void:
 			button.disabled = sim.points < cost or sim.state == BattleSimulationScript.BattleState.VICTORY or sim.state == BattleSimulationScript.BattleState.DEFEAT
 		else:
 			button.disabled = true
+	summon_button.disabled = sim.points < BattleSimulationScript.SUMMON_COST or sim.hand.size() >= BattleSimulationScript.HAND_SIZE or sim.state == BattleSimulationScript.BattleState.VICTORY or sim.state == BattleSimulationScript.BattleState.DEFEAT
 
 
 func _refresh_defense_button() -> void:
@@ -1118,6 +1166,9 @@ func _run_smoke_test() -> void:
 	events = s.submit({"type": "play_card", "id": "attack"})
 	assert(s.points == 0 and s.enemy_hp == 42)
 	assert(not s.hand.has("attack") and s.hand.size() == 3)
+	var evs_summon: Array = s.submit({"type": "summon"})
+	assert(s.points == 0 and s.hand.size() == 3)
+	_assert_has(evs_summon, "summon_rejected")
 	s.restart()
 	s.attack_index = 1
 	s._begin_attack()
@@ -1142,6 +1193,12 @@ func _run_smoke_test() -> void:
 	s.submit({"type": "play_card", "id": heavy_id})
 	assert(s.points == 3 - heavy_cost and s.enemy_hp == 46 - heavy_damage)
 	assert(s.hand.count(heavy_id) == heavy_count_before - 1)
+	if s.points >= BattleSimulationScript.SUMMON_COST and s.hand.size() < BattleSimulationScript.HAND_SIZE:
+		var hand_before: int = s.hand.size()
+		var pts_before: int = s.points
+		var evs2: Array = s.submit({"type": "summon"})
+		assert(s.hand.size() == hand_before + 1 and s.points == pts_before - BattleSimulationScript.SUMMON_COST)
+		_assert_has(evs2, "card_summoned")
 	s.restart()
 	s.attack_index = 2
 	s._begin_attack()

@@ -16,6 +16,7 @@ const ATTACK_RECOVERY := 0.62
 const PARRY_STAGGER := 0.8
 const HAND_SIZE := 4
 const STARTING_DECK := ["attack", "attack", "shatter", "guard", "shift"]
+const SUMMON_COST := 2
 const PLAYER_MAX_HP := 72
 
 const CARD_DATA := {
@@ -134,7 +135,27 @@ func submit(command: Dictionary) -> Array:
 			return _attempt_defense()
 		"play_card":
 			return _play_card(String(command.get("id", "")))
+		"summon":
+			return _summon_card()
 	return []
+
+
+func _summon_card() -> Array:
+	var events: Array = []
+	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
+		events.append({"type": "summon_rejected", "reason": "ended"})
+		return events
+	if hand.size() >= HAND_SIZE:
+		events.append({"type": "summon_rejected", "reason": "hand_full"})
+		return events
+	if points < SUMMON_COST:
+		events.append({"type": "summon_rejected", "reason": "points"})
+		return events
+	points -= SUMMON_COST
+	var id: String = CARD_DATA.keys()[int(_next_rand() * float(CARD_DATA.size()))]
+	hand.append(id)
+	events.append({"type": "card_summoned", "id": id, "cost": SUMMON_COST})
+	return events
 
 
 ## 推进一个渲染帧。返回这一帧发生的事件。
