@@ -1,0 +1,9 @@
+# Godot cache
+.godot/
+
+# Generated validation artifacts
+validation/
+
+# System junk
+Thumbs.db
+.DS_Store

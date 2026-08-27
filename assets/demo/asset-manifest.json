@@ -1,0 +1,20 @@
+{
+  "style": "C painterly demo placeholder",
+  "status": "prototype-only",
+  "generated_by": "tools/generate_demo_assets.py",
+  "license": "Project-owned original generated assets",
+  "assets": {
+    "background_old_street.png": "1920x1080 RGB",
+    "player_keeper.png": "640x800 RGBA",
+    "enemy_watchman.png": "640x800 RGBA",
+    "enemy_blade.png": "180x460 RGBA, separate animation layer",
+    "card_attack.png": "320x320 RGBA",
+    "card_shatter.png": "320x320 RGBA",
+    "card_guard.png": "320x320 RGBA",
+    "card_shift.png": "320x320 RGBA",
+    "audio/parry.wav": "44.1 kHz mono",
+    "audio/hurt.wav": "44.1 kHz mono",
+    "audio/card.wav": "44.1 kHz mono",
+    "audio/warning.wav": "44.1 kHz mono"
+  }
+}

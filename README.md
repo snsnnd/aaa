@@ -1,0 +1,36 @@
+# 项目 aaa — 设计索引
+
+> 卡牌 × 肉鸽 × 持续攻防 | 单人开发 | Godot 4.7 Mono | 目标：小型精策（30-60分钟一局）
+
+## 文档结构
+| 文件 | 内容 | 状态 |
+|------|------|------|
+| [decisions_log.md](decisions_log.md) | 全部已拍板决策 + 讨论理由 | 持续更新 |
+| [GDD_core.md](GDD_core.md) | 核心玩法机制规格 | v0.1 已定稿 |
+| [market_notes.md](market_notes.md) | 市场分析快照（2026-08） | 已定稿 |
+| [art_direction.md](art_direction.md) | C 手绘厚涂正式规范与概念图 | v0.2 已定稿 |
+| [story_bible.md](story_bible.md) | 世界观：轮回之秤/执灯人/三色怨气（嗔痴疑） | v0.1 已定稿 |
+| [DEMO.md](DEMO.md) | 基础战斗 Demo 操作与验证范围 | 可运行 |
+| [CARD_ACQUISITION.md](CARD_ACQUISITION.md) | 战斗内抽牌循环与战后怨契三选一 | v0.1 已定稿 |
+| [STS2_CODE_RESEARCH.md](STS2_CODE_RESEARCH.md) | 杀戮尖塔 2 代码架构研究与本项目启示 | 研究快照 2026-08-27 |
+
+## 一句话概念
+> **大殓之夜，怨鬼讨债。你是最后一个打更人——灯照本相，怨还其身：接住它的刀，替它了断。**
+> 只狼式弹反 × 杀戮尖塔式构筑 × 快慢刀节奏读招，持续攻防卡牌肉鸽。
+> 战斗骨架见 [GDD_core.md](GDD_core.md)，世界观见 [story_bible.md](story_bible.md)。
+
+## 开发约定
+- 引擎：Godot 4.7.2 (Mono/C#)，Windows 平台优先
+- 规模定位：小型精策——几十个房间短循环，敌人种类少而精
+- 资产管线：AI 辅助生成 + 统一风格校验（见 opencode skills: create-game-assets）
+- 技能包就位：game-feel / physics-tuning / godot-tween-animation / godot-camera-system
+
+## 当前可运行内容
+
+- `project.godot`：基础战斗 Demo
+- `assets/demo/`：唯一运行资产，采用 C 手绘厚涂方向
+- 敌人身体与武器分层，通过蓄势、回收、落刀和鬼手伸出表现三类快慢刀
+- 精确进度条已移除；玩家依靠动作轮廓、刃口闪光和音频动机判断反制时机
+- `Space` 是牌组外的统一防范：成功获得 1 还愿点，完美获得 2 点，失误触发短冷却
+- 四张原型卡消耗还愿点，可在敌人持续出招期间使用
+- `tools/validate_demo.sh`：操作与画面自动验证，输出到 `validation/`
