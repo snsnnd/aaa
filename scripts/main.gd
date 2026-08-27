@@ -29,7 +29,9 @@ var instruction_label: Label
 var defense_button: Button
 var flash: ColorRect
 var card_buttons: Dictionary = {}
-var card_icons: Dictionary = {}
+var slot_titles: Dictionary = {}
+var slot_hints: Dictionary = {}
+var _card_textures: Dictionary = {}
 var parry_audio: AudioStreamPlayer
 var hurt_audio: AudioStreamPlayer
 var card_audio: AudioStreamPlayer
@@ -63,6 +65,7 @@ func _ready() -> void:
 	_build_ui()
 	_load_style()
 	_apply_attack_presentation()
+	_rebuild_hand_ui()
 	_refresh_ui()
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		call_deferred("_run_smoke_test")
@@ -92,13 +95,13 @@ func _input(event: InputEvent) -> void:
 func _handle_shortcut(keycode: Key) -> bool:
 	match keycode:
 		KEY_1:
-			_submit({"type": "play_card", "id": "attack"})
+			_play_hand_slot(0)
 		KEY_2:
-			_submit({"type": "play_card", "id": "shatter"})
+			_play_hand_slot(1)
 		KEY_3:
-			_submit({"type": "play_card", "id": "guard"})
+			_play_hand_slot(2)
 		KEY_4:
-			_submit({"type": "play_card", "id": "shift"})
+			_play_hand_slot(3)
 		KEY_SPACE:
 			_submit({"type": "defend"})
 		KEY_R:
@@ -128,7 +131,11 @@ func _handle_event(event: Dictionary) -> void:
 			if int(event.grade) == BattleSimulationScript.DefenseGrade.PERFECT:
 				_show_message("刀光将落——正是此刻", Color("f2d487"), 0.5)
 			glow_boost = maxf(glow_boost, 0.18)
+			_spawn_guard_arc()
 			_refresh_defense_button()
+		"hand_changed":
+			_rebuild_hand_ui()
+			_refresh_ui()
 		"defense_miss":
 			impulse_x = -20.0
 			impulse_rot = -0.07
@@ -208,6 +215,15 @@ func _present_card(event: Dictionary) -> void:
 	card_audio.play()
 	var id := String(event.id)
 	_spawn_talisman(id)
+	match id:
+		"attack":
+			_spawn_paper_burst()
+		"shatter":
+			_spawn_counter_slash(bool(event.get("charged", false)))
+		"guard":
+			_spawn_seal_ring()
+		"shift":
+			_spawn_embers()
 	var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
 	if id == "shift":
 		if int(event.healed) > 0:
@@ -217,11 +233,109 @@ func _present_card(event: Dictionary) -> void:
 	elif id == "shatter" and bool(event.get("charged", false)):
 		_small_enemy_hit(0.32)
 		_show_message("还刃·乘势｜怨气 -%d" % int(event.damage), data.color, 0.8)
+	elif id == "guard":
+		_show_message("镇煞｜怨气 -%d，鬼招凝滞" % int(event.damage), data.color, 0.7)
 	else:
 		_small_enemy_hit(0.16)
-		var verb := "散去" if id == "attack" else "斩去"
-		_show_message("%s｜%s %d 点怨气" % [data.title, verb, int(event.damage)], data.color, 0.6)
+		_show_message("%s｜散去 %d 点怨气" % [data.title, int(event.damage)], data.color, 0.6)
+	_rebuild_hand_ui()
 	_refresh_ui()
+
+
+func _spawn_guard_arc() -> void:
+	var arc := Line2D.new()
+	var pts := PackedVector2Array()
+	for i in 13:
+		var a := -1.1 + 2.2 * float(i) / 12.0
+		pts.append(Vector2.RIGHT.rotated(a) * 86.0)
+	arc.points = pts
+	arc.width = 6.0
+	arc.default_color = Color("f2d487")
+	arc.position = player_pivot.position + Vector2(96, -4)
+	arc.z_index = 12
+	add_child(arc)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(arc, "scale", Vector2(1.25, 1.25), 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(arc, "modulate:a", 0.0, 0.28).set_delay(0.05)
+	tw.chain().tween_callback(arc.queue_free)
+
+
+func _spawn_paper_burst() -> void:
+	var burst := Node2D.new()
+	burst.position = enemy_sprite.position + Vector2(-30, -20)
+	burst.z_index = 12
+	add_child(burst)
+	for i in 6:
+		var shard := Polygon2D.new()
+		shard.polygon = PackedVector2Array([Vector2(-5, -8), Vector2(6, -6), Vector2(3, 9), Vector2(-7, 6)])
+		shard.color = Color("e8d9a8")
+		shard.rotation = randf_range(0.0, TAU)
+		burst.add_child(shard)
+		var drift := Vector2(randf_range(-110.0, -30.0), randf_range(-95.0, -20.0))
+		create_tween().tween_property(shard, "position", drift, 0.32).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var slash := Line2D.new()
+	slash.points = PackedVector2Array([Vector2(-70, -52), Vector2(64, 42)])
+	slash.width = 6.0
+	slash.default_color = Color("fff4ca")
+	burst.add_child(slash)
+	var fade := create_tween().set_ignore_time_scale(true)
+	fade.tween_interval(0.08)
+	fade.tween_property(burst, "modulate:a", 0.0, 0.28)
+	fade.tween_callback(burst.queue_free)
+
+
+func _spawn_counter_slash(charged: bool) -> void:
+	var slashes := Node2D.new()
+	slashes.position = enemy_sprite.position + Vector2(-20, -30)
+	slashes.z_index = 13
+	add_child(slashes)
+	var color := Color("ff9d5c") if charged else Color("e0b45c")
+	for a in [-0.5, 0.45]:
+		var s := Line2D.new()
+		s.points = PackedVector2Array([Vector2.RIGHT.rotated(a) * -132.0, Vector2.RIGHT.rotated(a) * 132.0])
+		s.width = 9.0 if charged else 6.5
+		s.default_color = color
+		slashes.add_child(s)
+	slashes.scale = Vector2(0.5, 0.5)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(slashes, "scale", Vector2(1.5, 1.5), 0.24).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tw.tween_property(slashes, "modulate:a", 0.0, 0.26).set_delay(0.08)
+	tw.chain().tween_callback(slashes.queue_free)
+	trauma = minf(1.0, trauma + (0.3 if charged else 0.18))
+
+
+func _spawn_seal_ring() -> void:
+	var ring := Line2D.new()
+	var pts := PackedVector2Array()
+	for i in 33:
+		pts.append(Vector2.RIGHT.rotated(TAU * float(i) / 32.0) * 112.0)
+	ring.points = pts
+	ring.width = 5.0
+	ring.default_color = Color("7fd4dc")
+	ring.position = enemy_sprite.position + Vector2(-10, -10)
+	ring.z_index = 12
+	add_child(ring)
+	enemy_sprite.modulate = Color("9fd8de")
+	create_tween().tween_property(enemy_sprite, "modulate", Color.WHITE, 0.5)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(ring, "scale", Vector2(0.45, 0.45), 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(ring, "modulate:a", 0.0, 0.42)
+	tw.chain().tween_callback(ring.queue_free)
+
+
+func _spawn_embers() -> void:
+	for i in 7:
+		var mote := Polygon2D.new()
+		mote.polygon = PackedVector2Array([Vector2(0, -4), Vector2(3, 0), Vector2(0, 4), Vector2(-3, 0)])
+		mote.color = Color("ffca7a")
+		mote.position = lantern_glow.position + Vector2(randf_range(-30.0, 30.0), randf_range(-10.0, 20.0))
+		mote.z_index = 12
+		add_child(mote)
+		var rise := randf_range(50.0, 115.0)
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(mote, "position:y", mote.position.y - rise, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tw.tween_property(mote, "modulate:a", 0.0, 0.6)
+		tw.chain().tween_callback(mote.queue_free)
 
 
 func _spawn_talisman(id: String) -> void:
@@ -443,9 +557,9 @@ func _build_ui() -> void:
 	instruction_label.text = "Space 架势防范\n1-4 消耗还愿出牌\n按空则气息散乱\nR 重新开始"
 	bottom.add_child(instruction_label)
 
-	var ids := ["attack", "shatter", "guard", "shift"]
-	for i in ids.size():
-		_create_card_button(bottom, ids[i], Vector2(285 + i * 160, 12))
+	for i in 4:
+		_create_slot_button(bottom, i, Vector2(285 + i * 160, 12))
+	_rebuild_hand_ui()
 
 	defense_button = Button.new()
 	defense_button.position = Vector2(975, 38)
@@ -465,29 +579,15 @@ func _build_ui() -> void:
 	root.add_child(flash)
 
 
-func _create_card_button(parent: Control, id: String, pos: Vector2) -> void:
-	var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
-	var hints := {
-		"attack": "1点｜散怨",
-		"shatter": "3点｜重斩",
-		"guard": "2点｜凝滞",
-		"shift": "2点｜续灯",
-	}
-	var tooltips := {
-		"attack": "散去 4 点怨气",
-		"shatter": "斩去 12 点怨气；完美接刀后追加 6",
-		"guard": "斩去 6 点怨气，鬼招短暂凝滞",
-		"shift": "回复 7 点灯油",
-	}
+func _create_slot_button(parent: Control, slot: int, pos: Vector2) -> void:
 	var button := Button.new()
 	button.position = pos
 	button.size = Vector2(142, 156)
 	button.focus_mode = Control.FOCUS_NONE
-	button.tooltip_text = tooltips[id]
-	button.add_theme_stylebox_override("normal", _style_box(Color("151821"), data.color.darkened(0.2), 12, 3))
-	button.add_theme_stylebox_override("hover", _style_box(Color("222631"), data.color, 12, 4))
+	button.add_theme_stylebox_override("normal", _style_box(Color("151821"), Color("4a4438"), 12, 3))
+	button.add_theme_stylebox_override("hover", _style_box(Color("222631"), Color("6a6250"), 12, 4))
 	button.add_theme_stylebox_override("pressed", _style_box(Color("0d0f15"), Color("ead8a4"), 12, 5))
-	button.pressed.connect(func(): _submit({"type": "play_card", "id": id}))
+	button.pressed.connect(_play_hand_slot.bind(slot))
 	parent.add_child(button)
 
 	var icon := TextureRect.new()
@@ -496,20 +596,63 @@ func _create_card_button(parent: Control, id: String, pos: Vector2) -> void:
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	button.add_child(icon)
-	card_icons[id] = icon
 
 	var title := _label(Vector2(8, 87), Vector2(126, 28), 20, Color("eee2c1"), true)
-	title.text = "%s  [%s]" % [data.title, data.key]
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(title)
 	var hint := _label(Vector2(8, 117), Vector2(126, 30), 13, Color("a9a49b"), false)
-	hint.text = hints[id]
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(hint)
-	card_buttons[id] = button
+	card_buttons[slot] = button
+	slot_titles[slot] = title
+	slot_hints[slot] = hint
+
+
+func _rebuild_hand_ui() -> void:
+	for i in 4:
+		var button: Button = card_buttons[i]
+		var icon: TextureRect = button.get_child(0)
+		var title: Label = slot_titles[i]
+		var hint: Label = slot_hints[i]
+		if i < sim.hand.size():
+			var id: String = sim.hand[i]
+			var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
+			icon.texture = _card_textures.get(id)
+			title.text = "%s  [%d]" % [data.title, i + 1]
+			hint.text = "%d点｜%s" % [data.cost, _card_short(id)]
+			button.tooltip_text = _card_tip(id)
+			var col: Color = data.color
+			button.add_theme_stylebox_override("normal", _style_box(Color("151821"), col.darkened(0.2), 12, 3))
+			button.add_theme_stylebox_override("hover", _style_box(Color("222631"), col, 12, 4))
+		else:
+			icon.texture = null
+			title.text = ""
+			hint.text = ""
+			button.tooltip_text = ""
+
+
+func _play_hand_slot(slot: int) -> void:
+	if slot >= 0 and slot < sim.hand.size():
+		_submit({"type": "play_card", "id": sim.hand[slot]})
+
+
+func _card_short(id: String) -> String:
+	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯"}
+	return shorts[id]
+
+
+func _card_tip(id: String) -> String:
+	var tips := {
+		"attack": "散去 4 点怨气",
+		"shatter": "斩去 12 点怨气；完美接刀后追加 6",
+		"guard": "斩去 6 点怨气，鬼招短暂凝滞",
+		"shift": "回复 7 点灯油",
+	}
+	return tips[id]
 
 
 func _load_style() -> void:
@@ -522,10 +665,8 @@ func _load_style() -> void:
 	player_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	enemy_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	weapon_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	for id in card_icons:
-		var icon: TextureRect = card_icons[id]
-		icon.texture = load("res://assets/%s/card_%s.png" % [folder, id])
-		icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	for id in BattleSimulationScript.CARD_DATA:
+		_card_textures[id] = load("res://assets/%s/card_%s.png" % [folder, id])
 	style_status.text = "第一夜·雨巷老街"
 
 
@@ -865,6 +1006,7 @@ func _restart_battle() -> void:
 	enemy_sprite.modulate = Color.WHITE
 	sim.restart()
 	_apply_attack_presentation()
+	_rebuild_hand_ui()
 	warning_audio.play()
 	_refresh_ui()
 	_show_message("夜还长，刀再来", Color("e2cf9c"), 1.0)
@@ -886,9 +1028,13 @@ func _refresh_ui() -> void:
 	player_status.text = "执灯人｜灯油 %d / %d" % [sim.player_hp, BattleSimulationScript.PLAYER_MAX_HP]
 	enemy_status.text = "前任更夫｜怨气 %d / 46" % maxi(0, sim.enemy_hp)
 	resource_status.text = "还愿 %d / %d    第 %d 招" % [sim.points, BattleSimulationScript.MAX_POINTS, sim.attack_index + 1]
-	for id in card_buttons:
-		var button: Button = card_buttons[id]
-		button.disabled = sim.points < int(BattleSimulationScript.CARD_DATA[id].cost) or sim.state == BattleSimulationScript.BattleState.VICTORY or sim.state == BattleSimulationScript.BattleState.DEFEAT
+	for i in 4:
+		var button: Button = card_buttons[i]
+		if i < sim.hand.size():
+			var cost := int(BattleSimulationScript.CARD_DATA[sim.hand[i]].cost)
+			button.disabled = sim.points < cost or sim.state == BattleSimulationScript.BattleState.VICTORY or sim.state == BattleSimulationScript.BattleState.DEFEAT
+		else:
+			button.disabled = true
 
 
 func _refresh_defense_button() -> void:
@@ -959,6 +1105,7 @@ func _run_smoke_test() -> void:
 	assert(background.texture != null and player_sprite.texture != null and enemy_sprite.texture != null and weapon_sprite.texture != null)
 	assert(s.state == BattleSimulationScript.BattleState.WINDUP)
 	assert(s.points == 0)
+	assert(s.hand.size() == 4 and s.hand.has("attack"))
 	var events: Array = s.submit({"type": "defend"})
 	assert(s.defense_cooldown > 0.0 and s.queued_defense == BattleSimulationScript.DefenseGrade.NONE)
 	s.defense_cooldown = 0.0
@@ -970,6 +1117,7 @@ func _run_smoke_test() -> void:
 	_assert_has(events, "impact")
 	events = s.submit({"type": "play_card", "id": "attack"})
 	assert(s.points == 0 and s.enemy_hp == 42)
+	assert(not s.hand.has("attack") and s.hand.size() == 3)
 	s.restart()
 	s.attack_index = 1
 	s._begin_attack()
@@ -987,8 +1135,13 @@ func _run_smoke_test() -> void:
 	assert(s.points == 2)
 	s.step(0.4)
 	assert(s.points == 3)
-	s.submit({"type": "play_card", "id": "shatter"})
-	assert(s.points == 0 and s.enemy_hp == 34)
+	var heavy_id: String = "shatter" if s.hand.has("shatter") else "attack"
+	var heavy_cost := int(BattleSimulationScript.CARD_DATA[heavy_id].cost)
+	var heavy_damage := 12 if heavy_id == "shatter" else 4
+	var heavy_count_before: int = s.hand.count(heavy_id)
+	s.submit({"type": "play_card", "id": heavy_id})
+	assert(s.points == 3 - heavy_cost and s.enemy_hp == 46 - heavy_damage)
+	assert(s.hand.count(heavy_id) == heavy_count_before - 1)
 	s.restart()
 	s.attack_index = 2
 	s._begin_attack()

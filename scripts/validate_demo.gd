@@ -23,11 +23,11 @@ func _run() -> void:
 
 	_check("viewport_is_1280x720", root.get_visible_rect().size == Vector2(1280, 720))
 	_check("starts_in_automatic_windup", demo.sim.state == demo.sim.BattleState.WINDUP and demo.sim.current_intent.id == "red")
-	_check("all_four_cards_exist", demo.card_buttons.size() == 4)
+	_check("hand_has_four_slots", demo.sim.hand.size() == 4 and demo.card_buttons.size() == 4)
 	_check("cards_inside_viewport", _cards_inside_viewport())
 	_check("separate_weapon_is_loaded", demo.weapon_sprite.texture != null)
 	_check("cards_have_point_costs", int(demo.sim.CARD_DATA.attack.cost) == 1 and int(demo.sim.CARD_DATA.shatter.cost) == 3 and int(demo.sim.CARD_DATA.guard.cost) == 2 and int(demo.sim.CARD_DATA.shift.cost) == 2)
-	_check("starts_without_card_points", demo.sim.points == 0 and demo.card_buttons.attack.disabled)
+	_check("unaffordable_hand_card_locked", demo.sim.points == 0 and demo.card_buttons[0].disabled == (int(demo.sim.CARD_DATA[demo.sim.hand[0]].cost) > 0))
 	_check("precision_progress_bar_removed", not _contains_progress_bar(demo))
 	var player_y_before: float = demo.player_sprite.position.y
 	var background_x_before: float = demo.background.position.x
@@ -61,7 +61,9 @@ func _run() -> void:
 	await _capture("03_red_success")
 
 	var enemy_hp_before: int = demo.sim.enemy_hp
-	await _send_key(KEY_1)
+	var attack_slot: int = demo.sim.hand.find("attack")
+	_check("attack_available_in_hand", attack_slot != -1)
+	await _send_key(KEY_1 + attack_slot)
 	_check("card_spends_defense_point", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 4)
 
 	_check("blue_attack_starts_automatically", await _wait_for_attack(1, 0.0))
@@ -80,7 +82,9 @@ func _run() -> void:
 	_check("blue_combo_builds_three_points", demo.sim.points == 3)
 
 	enemy_hp_before = demo.sim.enemy_hp
-	await _send_key(KEY_2)
+	var shatter_slot: int = demo.sim.hand.find("shatter")
+	_check("shatter_available_after_refill", shatter_slot != -1)
+	await _send_key(KEY_1 + shatter_slot)
 	_check("heavy_card_spends_three_points", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 12)
 	await _capture("05_point_card_play")
 

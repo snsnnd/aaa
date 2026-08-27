@@ -14,6 +14,8 @@ const MAX_POINTS := 9
 const STAGGER_CAP := 0.6
 const ATTACK_RECOVERY := 0.62
 const PARRY_STAGGER := 0.8
+const HAND_SIZE := 4
+const STARTING_DECK := ["attack", "attack", "shatter", "guard", "shift"]
 const PLAYER_MAX_HP := 72
 
 const CARD_DATA := {
@@ -57,6 +59,11 @@ var stagger_remaining := 0.0
 var perfect_charge := false
 var recovery_remaining := 0.0
 var battle_generation := 0
+var hand: Array[String] = []
+var draw_pile: Array[String] = []
+var discard_pile: Array[String] = []
+var rng_state := 0
+var battle_seed := 0
 var current_intent: Dictionary = INTENTS[0]
 
 
@@ -75,7 +82,48 @@ func restart() -> void:
 	perfect_charge = false
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
+	battle_seed = 20260828 + battle_generation
+	rng_state = battle_seed
+	_setup_deck()
 	_begin_attack()
+
+
+func _next_rand() -> float:
+	rng_state = (rng_state + 0x6D2B79F5) & 0xFFFFFFFF
+	var t := rng_state
+	t = ((t ^ (t >> 15)) * (t | 1)) & 0xFFFFFFFF
+	t = (t ^ (t + ((t ^ (t >> 7)) * (t | 61)))) & 0xFFFFFFFF
+	return float((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296.0
+
+
+func _shuffle(pile: Array[String]) -> void:
+	for i in range(pile.size() - 1, 0, -1):
+		var j := int(_next_rand() * float(i + 1))
+		var tmp := pile[i]
+		pile[i] = pile[j]
+		pile[j] = tmp
+
+
+func _setup_deck() -> void:
+	hand.clear()
+	draw_pile = Array(STARTING_DECK.duplicate(), TYPE_STRING, "", null)
+	discard_pile.clear()
+	_shuffle(draw_pile)
+	_draw_to_hand()
+
+
+func _draw_to_hand() -> bool:
+	var changed := false
+	while hand.size() < HAND_SIZE:
+		if draw_pile.is_empty():
+			if discard_pile.is_empty():
+				break
+			draw_pile = Array(discard_pile.duplicate(), TYPE_STRING, "", null)
+			discard_pile.clear()
+			_shuffle(draw_pile)
+		hand.append(draw_pile.pop_back())
+		changed = true
+	return changed
 
 
 ## 命令入口：{type:"defend"} 或 {type:"play_card", id:"attack"}。
@@ -209,6 +257,9 @@ func _play_card(id: String) -> Array:
 	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
 		events.append({"type": "card_rejected", "id": id, "reason": "ended"})
 		return events
+	if not hand.has(id):
+		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
+		return events
 	var cost := int(data.cost)
 	if points < cost:
 		events.append({"type": "card_rejected", "id": id, "reason": "points"})
@@ -233,6 +284,8 @@ func _play_card(id: String) -> Array:
 			var healed := mini(int(data.heal), PLAYER_MAX_HP - player_hp)
 			player_hp += healed
 			events.append({"type": "card_played", "id": id, "healed": healed})
+	hand.erase(id)
+	discard_pile.append(id)
 	if enemy_hp <= 0:
 		_end_battle(events)
 	return events
@@ -241,6 +294,8 @@ func _play_card(id: String) -> Array:
 func _finish_action(events: Array) -> void:
 	state = BattleState.RESOLVING
 	recovery_remaining = ATTACK_RECOVERY + (PARRY_STAGGER if perfect_charge else 0.0)
+	if _draw_to_hand():
+		events.append({"type": "hand_changed"})
 	events.append({"type": "action_finished"})
 
 
