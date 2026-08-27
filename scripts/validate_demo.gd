@@ -64,7 +64,7 @@ func _run() -> void:
 	var attack_slot: int = demo.sim.hand.find("attack")
 	_check("attack_available_in_hand", attack_slot != -1)
 	await _send_key(KEY_1 + attack_slot)
-	_check("card_spends_defense_point", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 4)
+	_check("card_spends_defense_point", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 5)
 
 	_check("blue_attack_starts_automatically", await _wait_for_attack(1, 0.0))
 	_check("blue_first_window_reached", await _wait_for_attack(1, 0.78))
@@ -85,7 +85,7 @@ func _run() -> void:
 	var heavy_id: String = "shatter" if demo.sim.hand.has("shatter") else "attack"
 	var heavy_slot: int = demo.sim.hand.find(heavy_id)
 	var heavy_cost: int = int(demo.sim.CARD_DATA[heavy_id].cost)
-	var heavy_damage: int = 12 if heavy_id == "shatter" else 4
+	var heavy_damage: int = 12 if heavy_id == "shatter" else 5
 	_check("hand_card_available", heavy_slot != -1)
 	await _send_key(KEY_1 + heavy_slot)
 	_check("hand_card_spends_points", demo.sim.points == 3 - heavy_cost and demo.sim.enemy_hp == enemy_hp_before - heavy_damage)

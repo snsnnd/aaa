@@ -20,7 +20,7 @@ const SUMMON_COST := 2
 const PLAYER_MAX_HP := 72
 
 const CARD_DATA := {
-	"attack": {"title": "斩纸", "class": "斩", "cost": 1, "damage": 4, "color": Color("d3a44b"), "key": "1"},
+	"attack": {"title": "斩纸", "class": "斩", "cost": 1, "damage": 5, "color": Color("d3a44b"), "key": "1"},
 	"shatter": {"title": "还刃", "class": "斩", "cost": 3, "damage": 12, "bonus": 6, "color": Color("bd3d45"), "key": "2"},
 	"guard": {"title": "镇煞", "class": "御", "cost": 2, "damage": 6, "stagger": 0.35, "color": Color("43a9b2"), "key": "3"},
 	"shift": {"title": "续灯", "class": "佑", "cost": 2, "heal": 7, "color": Color("6d9663"), "key": "4"},
@@ -53,7 +53,7 @@ const MOVES := {
 		],
 	},
 	"green": {
-		"id": "green", "title": "佯攻擒拿", "duration": 1.9, "damage": 18,
+		"id": "green", "title": "佯攻擒拿", "duration": 1.9, "damage": 14,
 		"window": 0.34, "fake": 0.78, "unblockable": true, "color": Color("6d9663"),
 		"phases": [
 			{"name": "feint", "until": 0.79},
@@ -76,14 +76,14 @@ const MOVES := {
 ## 敌人表：名称、血量、招式轮换（永不 RNG 抖动）。
 const ENEMIES := {
 	"watchman": {"name": "前任更夫", "hp": 46, "moves": ["red", "blue", "green"], "opening": "red"},
-	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "moves": ["quick", "green", "red"], "opening": "quick", "reactive": true},
+	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "moves": ["quick", "red"], "opening": "quick", "reactive": true},
 	"patrol_corpse": {"name": "更练尸", "hp": 38, "moves": ["blue", "red"], "opening": "blue", "reactive": true},
 	"barber_ghost": {"name": "剃头匠", "hp": 34, "moves": ["blue", "quick"], "opening": "blue", "reactive": true},
 	"paper_apprentice": {"name": "纸扎学徒", "hp": 30, "moves": ["red", "green"], "opening": "red", "reactive": true},
 	"well_sisters": {"name": "井中姐弟", "hp": 36, "moves": ["blue", "green"], "opening": "blue", "reactive": true},
 	"gambler_ghost": {"name": "赌鬼", "hp": 34, "moves": ["quick", "blue", "red"], "opening": "quick", "reactive": true},
-	"mortuary_warden": {"name": "义庄看守", "hp": 52, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
-	"lantern_keeper": {"name": "守灯人", "hp": 66, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
+	"mortuary_warden": {"name": "义庄看守", "hp": 36, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
+	"lantern_keeper": {"name": "守灯人", "hp": 40, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
 }
 
 var state: BattleState = BattleState.WINDUP
@@ -327,7 +327,7 @@ func _move_weight(mid: String) -> float:
 	var w := 1.0
 	if String(mid) == last_move_id:
 		w = 0.0
-	if bool(move.get("unblockable", false)) and points >= 6:
+	if bool(move.get("unblockable", false)) and points >= 7:
 		w += 0.9
 	if int(move.damage) >= 12 and player_hp <= 24:
 		w += 0.6

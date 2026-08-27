@@ -215,18 +215,21 @@ func refresh_defense() -> void:
 
 
 func _card_short(id: String) -> String:
-	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯"}
-	return shorts[id]
+	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯", "duannian": "断念", "dengxin": "挑芯", "zhuangzhong": "鸣钟"}
+	return shorts.get(id, "符牌")
 
 
 func _card_tip(id: String) -> String:
 	var tips := {
-		"attack": "散去 4 点怨气",
+		"attack": "散去 5 点怨气",
 		"shatter": "斩去 12 点怨气；完美接刀后追加 6",
 		"guard": "斩去 6 点怨气，鬼招短暂凝滞",
 		"shift": "回复 7 点灯油",
+		"duannian": "斩去 8 点怨气，弃一张手牌",
+		"dengxin": "回复 4 点灯油",
+		"zhuangzhong": "斩去 5 点怨气，凝滞 0.2 秒",
 	}
-	return tips[id]
+	return tips.get(id, "符牌")
 
 
 func _label(pos: Vector2, size: Vector2, font_size: int, color: Color, bold: bool) -> Label:

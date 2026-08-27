@@ -292,7 +292,7 @@ func _run_smoke_test() -> void:
 	assert(s.points == 1 and s.player_hp == BattleSimulationScript.PLAYER_MAX_HP)
 	_assert_has(events, "impact")
 	events = s.submit({"type": "play_card", "id": "attack"})
-	assert(s.points == 0 and s.enemy_hp == 42)
+	assert(s.points == 0 and s.enemy_hp == 41)
 	assert(not s.hand.has("attack") and s.hand.size() == 3)
 	var evs_summon: Array = s.submit({"type": "summon"})
 	assert(s.points == 0 and s.hand.size() == 3)
@@ -323,7 +323,7 @@ func _run_smoke_test() -> void:
 	else:
 		var attack_before: int = s.hand.count("attack")
 		s.submit({"type": "play_card", "id": "attack"})
-		assert(s.enemy_hp == 46 - 4 and s.points == 2)
+		assert(s.enemy_hp == 46 - 5 and s.points == 2)
 		assert(s.hand.count("attack") == attack_before - 1)
 	if s.points >= BattleSimulationScript.SUMMON_COST and s.hand.size() < BattleSimulationScript.HAND_SIZE:
 		var hand_before: int = s.hand.size()
@@ -346,7 +346,7 @@ func _run_smoke_test() -> void:
 		_assert_has(evs_green, "grab_cancelled")
 	else:
 		s.step(1.0)
-		assert(s.player_hp == BattleSimulationScript.PLAYER_MAX_HP - 18)
+		assert(s.player_hp == BattleSimulationScript.PLAYER_MAX_HP - int(s.current_intent.damage))
 	var s2 := BattleSimulationScript.new()
 	s2.enemy_id = "lantern_imp"
 	s2.restart()

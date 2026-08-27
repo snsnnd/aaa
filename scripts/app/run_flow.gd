@@ -38,18 +38,28 @@ var over_sub: Label
 var reward_title: Label
 var demo_mode := false
 var demo_hint: Label
+var playtest := "--playtest" in OS.get_cmdline_user_args()
 
 
 func _ready() -> void:
 	rng.randomize()
 	menu_layer = CanvasLayer.new(); menu_layer.layer = 5; add_child(menu_layer)
 	battle_layer = CanvasLayer.new(); battle_layer.layer = 1; add_child(battle_layer)
+	var flow_layer := CanvasLayer.new(); flow_layer.layer = 4; add_child(flow_layer)
+	node_label = _label(Vector2(520, 40), Vector2(240, 30), 20, Color("c8bb9d"), true)
+	node_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	node_label.visible = false
+	flow_layer.add_child(node_label)
 	reward_layer = CanvasLayer.new(); reward_layer.layer = 6; add_child(reward_layer)
 	over_layer = CanvasLayer.new(); over_layer.layer = 7; add_child(over_layer)
 	_build_menu()
 	_build_reward()
 	_build_over()
 	_enter(State.MENU)
+	if playtest:
+		print("[PLAYTEST] 开始自动游玩：牌库=%s" % [BASE_DECK])
+		Engine.time_scale = 4.0
+		start_run()
 
 
 func _can_enter(to: State) -> bool:
@@ -78,6 +88,7 @@ func _show_menu() -> void:
 	reward_layer.visible = false
 	over_layer.visible = false
 	battle_layer.visible = false
+	node_label.visible = false
 
 
 func _show_battle() -> void:
@@ -85,6 +96,7 @@ func _show_battle() -> void:
 	reward_layer.visible = false
 	over_layer.visible = false
 	battle_layer.visible = true
+	node_label.visible = true
 	battle = BattleScene.instantiate()
 	battle_layer.add_child(battle)
 	battle.apply_run_config(node_enemy, run_deck.duplicate())
@@ -106,7 +118,17 @@ func _show_reward() -> void:
 		button.disabled = false
 
 
+var playtest_runs := 0
 func _show_over() -> void:
+	if playtest:
+		playtest_runs += 1
+		print("[PLAYTEST] ===第 %d 次尝试结束：%s｜牌组=%s===" % [playtest_runs, "天明" if last_victory else "灯灭", str(run_deck)])
+		if playtest_runs < 4 and not last_victory:
+			_enter(State.MENU)
+			start_run()
+			return
+		print("[PLAYTEST] 全局结束：%s" % ["通关" if last_victory else "未能通关"])
+		get_tree().quit(0)
 	over_layer.visible = true
 	if last_victory:
 		over_title.text = "夜 尽 天 明"
@@ -117,7 +139,15 @@ func _show_over() -> void:
 
 
 func _process(_delta: float) -> void:
-	if demo_mode or state != State.BATTLE or battle == null:
+	if playtest:
+		Engine.time_scale = 4.0
+		if state == State.REWARD:
+			_on_reward_picked(0)
+	if demo_mode:
+		return
+	if playtest:
+		_bot_tick()
+	if state != State.BATTLE or battle == null:
 		return
 	var sim_state: int = battle.sim.state
 	if sim_state == BattleSimulationScript.BattleState.VICTORY:
@@ -154,6 +184,13 @@ func _end_demo() -> void:
 
 func _finish_battle(victory: bool) -> void:
 	last_victory = victory
+	if playtest and battle:
+		var s = battle.sim
+		print("[PLAYTEST] 节点=%s(%s) 敌=%s 结果=%s 灯油=%d/72 完美x%d 历经%d招 敌余血=%d" % [
+			node_name, node_enemy, s.enemy_name, "胜" if victory else "负",
+			s.player_hp, s.perfects, s.attack_index + 1, maxi(0, s.enemy_hp)])
+	if playtest and not victory:
+		print("[PLAYTEST] 夜巡失败，结束于第 %d 场" % (NODE_TABLE.size() - node_queue.size()))
 	if battle:
 		battle.queue_free()
 		battle = null
@@ -168,7 +205,9 @@ func _finish_battle(victory: bool) -> void:
 
 
 func start_run() -> void:
-	run_deck = BASE_DECK.duplicate()
+	run_deck.clear()
+	for id in BASE_DECK:
+		run_deck.append(String(id))
 	node_queue = NODE_TABLE.duplicate()
 	_advance_node()
 
@@ -191,6 +230,55 @@ func _on_reward_skipped() -> void:
 	if state != State.REWARD:
 		return
 	_advance_node()
+
+
+var _beat := 0
+func _bot_tick() -> void:
+	if battle == null:
+		return
+	_bot_play_cards()
+	var s = battle.sim
+	if s.state != BattleSimulationScript.BattleState.WINDUP:
+		return
+	_beat += 1
+	if _beat % 240 == 0:
+		print("[BOT] state=%d elapsed=%.2f pts=%d hp=%d ehp=%d move=%s hand=%s" % [
+			s.state, s.attack_elapsed, s.points, s.player_hp, s.enemy_hp,
+			s.current_intent.get("id", "?"), str(s.hand)])
+	var unblockable: bool = bool(s.current_intent.get("unblockable", false))
+	if unblockable:
+		if s.fake_released and s.points >= 2 and s.hand.has("guard"):
+			battle._submit({"type": "play_card", "id": "guard"})
+		return
+	if s.queued_defense == 0 and s.defense_cooldown <= 0.0:
+		var tt: float = s._current_impact_time() - s.attack_elapsed
+		if tt <= 0.06 and tt > -0.05:
+			battle._submit({"type": "defend"})
+
+
+
+func _bot_play_cards() -> void:
+	if battle == null:
+		return
+	var s = battle.sim
+	if s.state == BattleSimulationScript.BattleState.VICTORY or s.state == BattleSimulationScript.BattleState.DEFEAT:
+		return
+	var enemy_pool_has_unblockable := false
+	for mid in BattleSimulationScript.ENEMIES[s.enemy_id].moves:
+		if bool(BattleSimulationScript.MOVES[String(mid)].get("unblockable", false)):
+			enemy_pool_has_unblockable = true
+	var reserve := 2 if enemy_pool_has_unblockable else 0
+	if s.points >= 3 and s.hand.has("shatter") and s.points - 3 >= reserve:
+		battle._submit({"type": "play_card", "id": "shatter"})
+	elif s.player_hp <= (35 if node_name == "boss" else 30) and s.points >= 2 + reserve and s.hand.has("shift"):
+		battle._submit({"type": "play_card", "id": "shift"})
+	elif s.points >= 2 + reserve and s.draw_pile.size() + s.discard_pile.size() > 0 \
+			and not (s.hand.has("attack") or s.hand.has("shatter") or s.hand.has("zhuangzhong")):
+		battle._submit({"type": "summon"})
+	elif s.points >= 1 + reserve and s.hand.has("attack"):
+		battle._submit({"type": "play_card", "id": "attack"})
+	elif s.points >= 2 and s.hand.has("zhuangzhong"):
+		battle._submit({"type": "play_card", "id": "zhuangzhong"})
 
 
 func _card_flavor(id: String) -> String:
