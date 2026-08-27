@@ -148,6 +148,8 @@ func _handle_event(event: Dictionary) -> void:
 		"summon_rejected":
 			if String(event.get("reason", "")) == "hand_full":
 				_show_message("符位已满", Color("9e8b81"), 0.5)
+			elif String(event.get("reason", "")) == "empty":
+				_show_message("符堆已空", Color("9e8b81"), 0.5)
 			elif String(event.get("reason", "")) == "points":
 				_show_message("愿力不足", Color("c15454"), 0.5)
 		"defense_miss":

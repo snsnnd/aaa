@@ -82,11 +82,23 @@ func _run() -> void:
 	_check("blue_combo_builds_three_points", demo.sim.points == 3)
 
 	enemy_hp_before = demo.sim.enemy_hp
-	var shatter_slot: int = demo.sim.hand.find("shatter")
-	_check("shatter_available_after_refill", shatter_slot != -1)
-	await _send_key(KEY_1 + shatter_slot)
-	_check("heavy_card_spends_three_points", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 12)
+	var heavy_id: String = "shatter" if demo.sim.hand.has("shatter") else "attack"
+	var heavy_slot: int = demo.sim.hand.find(heavy_id)
+	var heavy_cost: int = int(demo.sim.CARD_DATA[heavy_id].cost)
+	var heavy_damage: int = 12 if heavy_id == "shatter" else 4
+	_check("hand_card_available", heavy_slot != -1)
+	await _send_key(KEY_1 + heavy_slot)
+	_check("hand_card_spends_points", demo.sim.points == 3 - heavy_cost and demo.sim.enemy_hp == enemy_hp_before - heavy_damage)
 	await _capture("05_point_card_play")
+
+	if demo.sim.points >= 2 and demo.sim.hand.size() < 4:
+		var hand_before: int = demo.sim.hand.size()
+		var points_before: int = demo.sim.points
+		await _send_key(KEY_5)
+		_check("summon_draws_from_piles", demo.sim.hand.size() == hand_before + 1 and demo.sim.points == points_before - 2)
+		await _capture("07_summon_talisman")
+	else:
+		_check("summon_pool_available", demo.sim.draw_pile.size() + demo.sim.discard_pile.size() > 0)
 
 	_check("green_attack_starts_automatically", await _wait_for_attack(2, 0.0))
 	_check("green_reveal_reached", await _wait_for_attack(2, float(demo.sim.current_intent.duration) - 0.18))

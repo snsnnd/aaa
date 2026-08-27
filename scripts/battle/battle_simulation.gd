@@ -151,8 +151,19 @@ func _summon_card() -> Array:
 	if points < SUMMON_COST:
 		events.append({"type": "summon_rejected", "reason": "points"})
 		return events
+	var pool: Array[String] = []
+	pool.append_array(draw_pile)
+	pool.append_array(discard_pile)
+	if pool.is_empty():
+		events.append({"type": "summon_rejected", "reason": "empty"})
+		return events
 	points -= SUMMON_COST
-	var id: String = CARD_DATA.keys()[int(_next_rand() * float(CARD_DATA.size()))]
+	var idx := int(_next_rand() * float(pool.size()))
+	var id: String = pool[idx]
+	if idx < draw_pile.size():
+		draw_pile.erase(id)
+	else:
+		discard_pile.erase(id)
 	hand.append(id)
 	events.append({"type": "card_summoned", "id": id, "cost": SUMMON_COST})
 	return events
@@ -315,8 +326,6 @@ func _play_card(id: String) -> Array:
 func _finish_action(events: Array) -> void:
 	state = BattleState.RESOLVING
 	recovery_remaining = ATTACK_RECOVERY + (PARRY_STAGGER if perfect_charge else 0.0)
-	if _draw_to_hand():
-		events.append({"type": "hand_changed"})
 	events.append({"type": "action_finished"})
 
 
