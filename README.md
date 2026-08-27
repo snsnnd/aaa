@@ -27,7 +27,7 @@
 
 ## 当前可运行内容
 
-- `project.godot`：基础战斗 Demo
+- `project.godot`：主场景为正式版标题界面（scenes/game.tscn）；demo 战斗保留于 scenes/main.tscn
 - `assets/demo/`：唯一运行资产，采用 C 手绘厚涂方向
 - 敌人身体与武器分层，通过蓄势、回收、落刀和鬼手伸出表现三类快慢刀
 - 精确进度条已移除；玩家依靠动作轮廓、刃口闪光和音频动机判断反制时机

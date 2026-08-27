@@ -2,10 +2,16 @@
 
 ## 启动
 
-在项目目录运行：
+正式版（标题界面 → 夜巡 → 结算）：
 
 ```bash
 godot --path "$(wslpath -w /mnt/d/Godot/aaa)"
+```
+
+demo 战斗（开发验证，也已挂在标题界面"旧日试炼"）：
+
+```bash
+godot --path "$(wslpath -w /mnt/d/Godot/aaa)" scenes/main.tscn
 ```
 
 或双击 `project.godot` 后在 Godot 中按 F6/F5。

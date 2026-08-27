@@ -36,6 +36,8 @@ var node_label: Label
 var over_title: Label
 var over_sub: Label
 var reward_title: Label
+var demo_mode := false
+var demo_hint: Label
 
 
 func _ready() -> void:
@@ -115,13 +117,39 @@ func _show_over() -> void:
 
 
 func _process(_delta: float) -> void:
-	if state != State.BATTLE or battle == null:
+	if demo_mode or state != State.BATTLE or battle == null:
 		return
 	var sim_state: int = battle.sim.state
 	if sim_state == BattleSimulationScript.BattleState.VICTORY:
 		_finish_battle(true)
 	elif sim_state == BattleSimulationScript.BattleState.DEFEAT:
 		_finish_battle(false)
+
+
+func _input(event: InputEvent) -> void:
+	if demo_mode and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_end_demo()
+		get_viewport().set_input_as_handled()
+
+
+func _start_demo() -> void:
+	menu_layer.visible = false
+	reward_layer.visible = false
+	over_layer.visible = false
+	battle_layer.visible = true
+	demo_mode = true
+	demo_hint.visible = true
+	battle = BattleScene.instantiate()
+	battle_layer.add_child(battle)
+
+
+func _end_demo() -> void:
+	demo_mode = false
+	demo_hint.visible = false
+	if battle:
+		battle.queue_free()
+		battle = null
+	_enter(State.MENU)
 
 
 func _finish_battle(victory: bool) -> void:
@@ -184,12 +212,24 @@ func _build_menu() -> void:
 	sub.text = "灯照本相，怨还其身"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_layer.add_child(sub)
-	var start := _button(Vector2(490, 420), Vector2(300, 64), "开始夜巡")
+	var start := _button(Vector2(490, 400), Vector2(300, 64), "开始夜巡")
 	start.pressed.connect(start_run)
 	menu_layer.add_child(start)
-	var quit := _button(Vector2(490, 500), Vector2(300, 52), "退出")
+	var demo := _button(Vector2(490, 478), Vector2(300, 52), "旧日试炼 [开发]")
+	demo.pressed.connect(_start_demo)
+	menu_layer.add_child(demo)
+	var quit := _button(Vector2(490, 544), Vector2(300, 44), "退出")
 	quit.pressed.connect(func(): get_tree().quit())
 	menu_layer.add_child(quit)
+	var controls := _label(Vector2(340, 620), Vector2(600, 30), 16, Color("7a7264"), false)
+	controls.text = "Space 防范 · 1-4 符牌 · 5 召符 · Esc 菜单"
+	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_layer.add_child(controls)
+	demo_hint = _label(Vector2(340, 40), Vector2(600, 30), 16, Color("9caaa9"), false)
+	demo_hint.text = "旧日试炼（开发验证）· Esc 返回标题"
+	demo_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	demo_hint.visible = false
+	menu_layer.add_child(demo_hint)
 
 
 func _build_reward() -> void:
