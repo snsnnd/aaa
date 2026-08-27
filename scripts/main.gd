@@ -22,8 +22,6 @@ var player_status: Label
 var enemy_status: Label
 var resource_status: Label
 var style_status: Label
-var intent_label: Label
-var timing_label: Label
 var message_label: Label
 var instruction_label: Label
 var defense_button: Button
@@ -56,14 +54,20 @@ var impulse_rot := 0.0
 var glow_boost := 0.0
 var enemy_push := 0.0
 var talismans: Array[Node2D] = []
+var menu_layer: CanvasLayer
+var menu_root: Control
+var menu_open := false
+var shake_enabled := true
 
 
 func _ready() -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	noise.seed = 4271
-	sim = BattleSimulationScript.new()
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	sim = BattleSimulation.new()
 	_build_world()
 	_build_ui()
+	_build_menu()
 	_load_style()
 	_apply_attack_presentation()
 	_rebuild_hand_ui()
@@ -77,6 +81,8 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	if menu_open:
+		return
 	_update_ambient_animation(delta)
 	_update_camera_shake(delta)
 	_refresh_defense_button()
@@ -94,6 +100,16 @@ func _input(event: InputEvent) -> void:
 
 
 func _handle_shortcut(keycode: Key) -> bool:
+	if menu_open:
+		match keycode:
+			KEY_ESCAPE:
+				_toggle_menu()
+			KEY_R:
+				_close_menu()
+				_restart_battle()
+			_:
+				return false
+		return true
 	match keycode:
 		KEY_1:
 			_play_hand_slot(0)
@@ -107,6 +123,8 @@ func _handle_shortcut(keycode: Key) -> bool:
 			_submit({"type": "summon"})
 		KEY_SPACE:
 			_submit({"type": "defend"})
+		KEY_ESCAPE:
+			_toggle_menu()
 		KEY_R:
 			_restart_battle()
 		_:
@@ -257,6 +275,103 @@ func _present_card(event: Dictionary) -> void:
 		_show_message("%s｜散去 %d 点怨气" % [data.title, int(event.damage)], data.color, 0.6)
 	_rebuild_hand_ui()
 	_refresh_ui()
+
+
+func _close_menu() -> void:
+	menu_open = false
+	if menu_root:
+		menu_root.visible = false
+	get_tree().paused = false
+
+
+func _toggle_menu() -> void:
+	menu_open = not menu_open
+	menu_root.visible = menu_open
+	get_tree().paused = menu_open
+
+
+func _build_menu() -> void:
+	menu_layer = CanvasLayer.new()
+	menu_layer.layer = 10
+	menu_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(menu_layer)
+	menu_root = Control.new()
+	menu_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	menu_root.visible = false
+	menu_layer.add_child(menu_root)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.0, 0.0, 0.0, 0.74)
+	menu_root.add_child(dim)
+
+	var panel := Panel.new()
+	panel.position = Vector2(440, 150)
+	panel.size = Vector2(400, 420)
+	panel.add_theme_stylebox_override("panel", _style_box(Color(0.03, 0.03, 0.045, 0.97), Color("8a6a3a"), 16, 2))
+	menu_root.add_child(panel)
+
+	var title := _label(Vector2(20, 24), Vector2(360, 40), 26, Color("f1d185"), true)
+	title.text = "歇  脚"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	panel.add_child(title)
+
+	var resume := Button.new()
+	resume.position = Vector2(60, 92)
+	resume.size = Vector2(280, 52)
+	resume.focus_mode = Control.FOCUS_NONE
+	resume.text = "继续  [Esc]"
+	resume.add_theme_font_size_override("font_size", 20)
+	resume.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
+	resume.add_theme_stylebox_override("hover", _style_box(Color("493126"), Color("e0ad58"), 12, 3))
+	resume.pressed.connect(_toggle_menu)
+	panel.add_child(resume)
+
+	var restart := Button.new()
+	restart.position = Vector2(60, 154)
+	restart.size = Vector2(280, 52)
+	restart.focus_mode = Control.FOCUS_NONE
+	restart.text = "重新开始  [R]"
+	restart.add_theme_font_size_override("font_size", 20)
+	restart.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
+	restart.add_theme_stylebox_override("hover", _style_box(Color("493126"), Color("e0ad58"), 12, 3))
+	restart.pressed.connect(func():
+		_close_menu()
+		_restart_battle()
+	)
+	panel.add_child(restart)
+
+	var vol_label := _label(Vector2(60, 228), Vector2(280, 26), 16, Color("a9a49b"), false)
+	vol_label.text = "音效音量"
+	panel.add_child(vol_label)
+	var volume := HSlider.new()
+	volume.position = Vector2(60, 258)
+	volume.size = Vector2(280, 24)
+	volume.min_value = 0.0
+	volume.max_value = 1.0
+	volume.step = 0.05
+	volume.value = 0.8
+	volume.focus_mode = Control.FOCUS_NONE
+	volume.value_changed.connect(func(v: float): AudioServer.set_bus_volume_db(0, linear_to_db(maxf(v, 0.0001))))
+	panel.add_child(volume)
+
+	var shake_toggle := CheckButton.new()
+	shake_toggle.position = Vector2(60, 296)
+	shake_toggle.size = Vector2(280, 34)
+	shake_toggle.text = "画面震动"
+	shake_toggle.button_pressed = true
+	shake_toggle.focus_mode = Control.FOCUS_NONE
+	shake_toggle.toggled.connect(func(on: bool): shake_enabled = on)
+	panel.add_child(shake_toggle)
+
+	var hint_toggle := CheckButton.new()
+	hint_toggle.position = Vector2(60, 340)
+	hint_toggle.size = Vector2(280, 34)
+	hint_toggle.text = "操作提示"
+	hint_toggle.button_pressed = false
+	hint_toggle.focus_mode = Control.FOCUS_NONE
+	hint_toggle.toggled.connect(func(on: bool): instruction_label.visible = on)
+	panel.add_child(hint_toggle)
 
 
 func _spawn_guard_arc(color := Color("f2d487")) -> void:
@@ -558,25 +673,6 @@ func _build_ui() -> void:
 	style_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(style_status)
 
-	var intent_panel := Panel.new()
-	intent_panel.position = Vector2(803, 106)
-	intent_panel.size = Vector2(435, 58)
-	intent_panel.add_theme_stylebox_override("panel", _style_box(Color(0.025, 0.03, 0.04, 0.90), Color("755335"), 16, 2))
-	root.add_child(intent_panel)
-	intent_label = _label(Vector2(20, 10), Vector2(395, 30), 21, Color("efe1bf"), true)
-	intent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	intent_panel.add_child(intent_label)
-
-	var timing_panel := Panel.new()
-	timing_panel.position = Vector2(377, 112)
-	timing_panel.size = Vector2(402, 72)
-	timing_panel.add_theme_stylebox_override("panel", _style_box(Color(0.02, 0.025, 0.035, 0.90), Color("6f5a3f"), 16, 2))
-	root.add_child(timing_panel)
-	timing_label = _label(Vector2(14, 8), Vector2(374, 55), 22, Color("e6d8b7"), true)
-	timing_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timing_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	timing_panel.add_child(timing_label)
-
 	message_label = _label(Vector2(220, 456), Vector2(840, 65), 30, Color("f3deb1"), true)
 	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -591,7 +687,8 @@ func _build_ui() -> void:
 	bottom.add_theme_stylebox_override("panel", _style_box(Color(0.025, 0.026, 0.035, 0.96), Color("4e3f34"), 0, 2))
 	root.add_child(bottom)
 	instruction_label = _label(Vector2(24, 18), Vector2(246, 142), 16, Color("a9a49b"), false)
-	instruction_label.text = "Space 架势防范\n1-4 消耗还愿出牌\n5 召符（2 点）\n按空则气息散乱\nR 重新开始"
+	instruction_label.text = "Space 架势防范\n1-4 消耗还愿出牌\n5 召符（2 点）\n按空则气息散乱\nR 重新开始\nEsc 菜单"
+	instruction_label.visible = false
 	bottom.add_child(instruction_label)
 
 	for i in 4:
@@ -727,15 +824,6 @@ func _apply_attack_presentation() -> void:
 	weapon_sprite.modulate = Color.WHITE
 	ghost_hand.visible = false
 	_reset_enemy_pose()
-	intent_label.text = "敌意图：%s" % sim.current_intent.title
-	timing_label.modulate = _intent_color().lightened(0.35)
-	match String(sim.current_intent.id):
-		"red":
-			timing_label.text = "怨气凝刃，蓄而未发"
-		"blue":
-			timing_label.text = "残影连闪，刀势不停"
-		"green":
-			timing_label.text = "刀光是虚，鬼手是真"
 
 
 func _update_enemy_attack_visuals() -> void:
@@ -859,6 +947,29 @@ func _small_enemy_hit(strength: float) -> void:
 	trauma = minf(1.0, trauma + strength)
 	enemy_sprite.modulate = Color("ffd59a")
 	create_tween().tween_property(enemy_sprite, "modulate", Color.WHITE, 0.18).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	var original_scale := enemy_sprite.scale
+	enemy_sprite.scale = original_scale * Vector2(1.07, 0.93)
+	create_tween().tween_property(enemy_sprite, "scale", original_scale, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_spawn_hit_sparks()
+
+
+func _spawn_hit_sparks() -> void:
+	var sparks := Node2D.new()
+	sparks.position = enemy_sprite.position + Vector2(-46, -34)
+	sparks.z_index = 13
+	add_child(sparks)
+	for i in 7:
+		var spark := Line2D.new()
+		var a := randf_range(-PI * 0.85, -PI * 0.15)
+		var length := randf_range(26.0, 64.0)
+		spark.points = PackedVector2Array([Vector2.ZERO, Vector2.RIGHT.rotated(a) * length])
+		spark.width = randf_range(2.0, 4.0)
+		spark.default_color = Color("fff1bd") if i % 2 == 0 else Color("ffd59a")
+		sparks.add_child(spark)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(sparks, "modulate:a", 0.0, 0.18)
+	tw.tween_property(sparks, "scale", Vector2(1.3, 1.3), 0.18)
+	tw.chain().tween_callback(sparks.queue_free)
 
 
 func _parry_feedback(pos: Vector2, major: bool) -> void:
@@ -1028,7 +1139,7 @@ func _update_talisman_trails() -> void:
 
 
 func _update_camera_shake(delta: float) -> void:
-	if trauma <= 0.0:
+	if not shake_enabled or trauma <= 0.0:
 		camera.offset = Vector2.ZERO
 		camera.rotation = 0.0
 		return
@@ -1043,6 +1154,7 @@ func _update_camera_shake(delta: float) -> void:
 
 
 func _restart_battle() -> void:
+	_close_menu()
 	Engine.time_scale = 1.0
 	trauma = 0.0
 	pose_x = 0.0
