@@ -1,106 +1,103 @@
 extends Node
 
-## 正式版骨架：RunFlow 状态机驱动 标题→夜巡（战斗/事件/篝火）→奖励→结算。
+## RunFlow（瘦身版）：只负责状态机与屏幕编排。
+## 局状态在 RunState，界面在 screens/，规则在 battle/，持久化在 SaveManager，
+## 时间在 GameTime，键位/辅助在 GameSettings，数据闭环在 Telemetry。
 
-enum State { MENU, BATTLE, REWARD, REST, EVENT, GAME_OVER }
+enum State { MENU, MAP, BATTLE, REWARD, REST, EVENT, SHOP, GAME_OVER }
 
 const TRANSITIONS := {
-	State.MENU: [State.MENU, State.BATTLE],
-	State.BATTLE: [State.REWARD, State.REST, State.EVENT, State.GAME_OVER],
-	State.REWARD: [State.BATTLE, State.REST, State.EVENT],
-	State.REST: [State.BATTLE, State.EVENT, State.REST],
-	State.EVENT: [State.BATTLE, State.REST, State.EVENT],
-	State.GAME_OVER: [State.MENU],
+	State.MENU: [State.MENU, State.MAP],
+	State.MAP: [State.MAP, State.BATTLE, State.REST, State.EVENT, State.SHOP, State.GAME_OVER],
+	State.BATTLE: [State.REWARD, State.GAME_OVER, State.MAP],
+	State.REWARD: [State.MAP],
+	State.REST: [State.MAP],
+	State.EVENT: [State.MAP],
+	State.SHOP: [State.MAP],
+	State.GAME_OVER: [State.MENU, State.MAP],
 }
 
 const BattleScene := preload("res://scenes/main.tscn")
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
-const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
-const BASE_DECK := ["attack", "attack", "shatter", "guard", "shift"]
-const DRAFT_POOL := [
-	"attack", "shatter", "duannian", "zhuangzhong", "zhuying", "liebo", "xuezhang", "baiguyin", "shoulian", "shuangdeng", "yuangui", "tianping",
-	"guard", "difan", "jieshi", "tongjing", "fuhunsuo", "jiedao", "jinshen", "podan", "duanxiang",
-	"shift", "dengxin", "tianyou", "wenlu", "zhima", "changming", "jieshou", "anhun", "tinggeng",
-]
-const NODE_TABLE := [
-	["battle", "lantern_imp"], ["event", "paper_clue"], ["battle", "paper_apprentice"],
-	["rest", ""], ["battle", "patrol_corpse"], ["elite", "mortuary_warden"],
-	["battle", "gambler_ghost"], ["event", "gambler_debt"], ["rest", ""],
-	["battle", "barber_ghost"], ["battle", "well_sisters"], ["boss", "lantern_keeper"],
-]
-const EVENTS := {
-	"paper_clue": {
-		"title": "纸人百号", "a": "帮他开脸（+12 灯油）", "b": "婉拒离开（得一张符牌）",
-		"body": "学徒的第九十九个纸人还缺一张真脸。三张纸胎上的门牌，都指着义庄 13 号。",
-	},
-	"gambler_debt": {
-		"title": "赌债", "a": "押一局（五五开：赢符牌 / 输 12 灯油）", "b": "不赌",
-		"body": "赌鬼把骰子撒在地上：那晚满城都在排队投胎，他押阎王没空管——他输了。",
-	},
-}
+const CardSystemScript := preload("res://scripts/battle/card_system.gd")
+const RunStateScript := preload("res://scripts/app/run_state.gd")
+const SaveManagerScript := preload("res://scripts/app/save_manager.gd")
+const MenuScreen := preload("res://scripts/app/screens/menu_screen.gd")
+const MapScreen := preload("res://scripts/app/screens/map_screen.gd")
+const RewardScreen := preload("res://scripts/app/screens/reward_screen.gd")
+const RestScreen := preload("res://scripts/app/screens/rest_screen.gd")
+const EventScreen := preload("res://scripts/app/screens/event_screen.gd")
+const ShopScreen := preload("res://scripts/app/screens/shop_screen.gd")
+const OverScreen := preload("res://scripts/app/screens/over_screen.gd")
+const SettingsScreen := preload("res://scripts/app/screens/settings_screen.gd")
+const PickOverlay := preload("res://scripts/app/screens/pick_overlay.gd")
+const MapGenScript := preload("res://scripts/app/map_generator.gd")
 
 var state: State = State.MENU
-var run_deck: Array[String] = []
-var run_hp := 72
-var node_queue: Array = []
-var node_name := ""
-var node_enemy := "watchman"
-var last_victory := false
-var draft_options: Array[String] = []
-var rng := RandomNumberGenerator.new()
+var run: RunStateScript
 var battle: Node
-var pending_event_id := "paper_clue"
+var last_victory := false
+var pending_gold := 0
+var _pending_event_id := ""
+var _remove_after_pick := false
 
+# playtest
 var playtest := "--playtest" in OS.get_cmdline_user_args()
 var ai_strategy := {}
-var narrated_move := ""
 var _beat := 0
 var playtest_runs := 0
 
+# demo（旧日试炼）
 var demo_mode := false
-var demo_hint: Label
 
-var menu_layer: CanvasLayer
-var battle_layer: CanvasLayer
-var reward_layer: CanvasLayer
-var rest_layer: CanvasLayer
-var event_layer: CanvasLayer
-var over_layer: CanvasLayer
-var flow_layer: CanvasLayer
-var node_label: Label
-var over_title: Label
-var over_sub: Label
-var reward_title: Label
-var rest_body: Label
-var event_title: Label
-var event_body: Label
-var event_choice_a: Button
-var event_choice_b: Button
+var menu_screen: MenuScreen
+var map_screen: MapScreen
+var reward_screen: RewardScreen
+var rest_screen: RestScreen
+var event_screen: EventScreen
+var shop_screen: ShopScreen
+var over_screen: OverScreen
+var settings_screen: SettingsScreen
+var pick_overlay: PickOverlay
 
 
 func _ready() -> void:
-	rng.randomize()
-	menu_layer = CanvasLayer.new(); menu_layer.layer = 5; menu_layer.visible = false; add_child(menu_layer)
-	battle_layer = CanvasLayer.new(); battle_layer.layer = 1; battle_layer.visible = false; add_child(battle_layer)
-	reward_layer = CanvasLayer.new(); reward_layer.layer = 6; reward_layer.visible = false; add_child(reward_layer)
-	rest_layer = CanvasLayer.new(); rest_layer.layer = 6; rest_layer.visible = false; add_child(rest_layer)
-	event_layer = CanvasLayer.new(); event_layer.layer = 6; event_layer.visible = false; add_child(event_layer)
-	over_layer = CanvasLayer.new(); over_layer.layer = 7; over_layer.visible = false; add_child(over_layer)
-	flow_layer = CanvasLayer.new(); flow_layer.layer = 4; flow_layer.visible = false; add_child(flow_layer)
-	node_label = _label(Vector2(520, 40), Vector2(240, 30), 20, Color("c8bb9d"), true)
-	node_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	flow_layer.add_child(node_label)
-	_build_menu()
-	_build_reward()
-	_build_flow_ui()
-	_build_over()
+	Telemetry.enabled = not playtest
+	menu_screen = MenuScreen.new(); add_child(menu_screen)
+	map_screen = MapScreen.new(); add_child(map_screen)
+	reward_screen = RewardScreen.new(); add_child(reward_screen)
+	rest_screen = RestScreen.new(); add_child(rest_screen)
+	event_screen = EventScreen.new(); add_child(event_screen)
+	shop_screen = ShopScreen.new(); add_child(shop_screen)
+	over_screen = OverScreen.new(); add_child(over_screen)
+	settings_screen = SettingsScreen.new(); add_child(settings_screen)
+	pick_overlay = PickOverlay.new(); add_child(pick_overlay)
+	_wire_screens()
+	menu_screen.refresh()
 	if playtest:
 		_load_strategy()
 		print("[PLAYTEST] 开始自动游玩：策略=%s" % str(ai_strategy))
-		Engine.time_scale = 4.0
-		start_run()
+		GameTime.base_scale = 4.0
+		_start_new_run(0, 0)
 	else:
 		_enter(State.MENU)
+
+
+func _wire_screens() -> void:
+	menu_screen.start_new.connect(_start_new_run)
+	menu_screen.continue_run.connect(_continue_run)
+	menu_screen.open_settings.connect(func(): settings_screen.open())
+	menu_screen.start_demo.connect(_start_demo)
+	settings_screen.closed.connect(func(): menu_screen.refresh())
+	map_screen.node_picked.connect(_on_node_picked)
+	reward_screen.card_picked.connect(_on_reward_picked)
+	reward_screen.skipped.connect(_on_reward_skipped)
+	rest_screen.rest_choice.connect(_on_rest_choice)
+	event_screen.choice_made.connect(_on_event_choice)
+	shop_screen.bought.connect(_on_shop_buy)
+	shop_screen.left_shop.connect(_leave_shop)
+	pick_overlay.picked.connect(_on_pick_done)
+	pick_overlay.cancelled.connect(func(): _remove_after_pick = false)
 
 
 func _can_enter(to: State) -> bool:
@@ -110,40 +107,409 @@ func _can_enter(to: State) -> bool:
 func _enter(to: State) -> void:
 	assert(_can_enter(to), "非法状态转移 %s -> %s" % [State.keys()[state], State.keys()[to]])
 	state = to
+	menu_screen.visible = to == State.MENU
+	map_screen.visible = to == State.MAP
+	reward_screen.visible = to == State.REWARD
+	rest_screen.visible = to == State.REST
+	event_screen.visible = to == State.EVENT
+	shop_screen.visible = to == State.SHOP
+	over_screen.visible = to == State.GAME_OVER
 	match to:
 		State.MENU:
-			_show_menu()
+			menu_screen.refresh()
+		State.MAP:
+			_show_map()
 		State.BATTLE:
 			_show_battle()
 		State.REWARD:
 			_show_reward()
 		State.REST:
-			_show_rest()
+			rest_screen.show_rest(run.hp, run.max_hp)
 		State.EVENT:
 			_show_event()
+		State.SHOP:
+			_show_shop()
 		State.GAME_OVER:
 			_show_over()
 
 
+# ————————————————————— Run 生命周期 —————————————————————
+
+func _start_new_run(difficulty: int, seed_value: int) -> void:
+	run = RunStateScript.new(seed_value, difficulty)
+	run.setup_new_run()
+	var mods := run.mods()
+	if mods.has("start_hp_penalty"):
+		run.hp -= int(mods["start_hp_penalty"])
+	Telemetry.start_run(run.seed_value, difficulty)
+	if not playtest:
+		var meta: Dictionary = SaveManagerScript.load_meta()
+		meta["runs_total"] = int(meta.get("runs_total", 0)) + 1
+		SaveManagerScript.save_meta(meta)
+	_enter(State.MAP)
+
+
+func _continue_run() -> void:
+	var data: Dictionary = SaveManagerScript.load_run()
+	if data.is_empty():
+		return
+	run = RunStateScript.new()
+	run.from_dict(data)
+	Telemetry.start_run(run.seed_value, run.difficulty)
+	_enter(State.MAP)
+
+
+func _save_run() -> void:
+	if run:
+		SaveManagerScript.save_run(run)
+
+
+func _show_map() -> void:
+	var map_gen: MapGenScript = MapGenScript.new()
+	var options: Array = []
+	if run.node_row == 0 and run.node_col == 0 and run.current_node.is_empty():
+		# 开局：入口节点
+		var rows: Array = run.map.get("rows", [])
+		for c in rows[0].size():
+			options.append({"row": 0, "col": c, "node": rows[0][c]})
+	else:
+		options = map_gen.next_options(run.map, run.node_row, run.node_col)
+	map_screen.show_map(run.map, run.node_row, run.node_col, options, run.hp, run.max_hp, run.gold)
+
+
+func _on_node_picked(row: int, col: int) -> void:
+	var node: Dictionary = run.map["rows"][row][col]
+	run.current_node = node
+	run.node_row = row
+	run.node_col = col
+	Telemetry.record_node(String(node.get("type", "battle")), String(node.get("enemy", "")), row)
+	match String(node.get("type", "battle")):
+		"battle", "elite", "boss":
+			_enter(State.BATTLE)
+		"rest":
+			_enter(State.REST)
+		"event":
+			_enter(State.EVENT)
+		"shop":
+			_enter(State.SHOP)
+		"treasure":
+			_grant_treasure()
+		_:
+			_enter(State.BATTLE)
+
+
+func _grant_treasure() -> void:
+	var rng_gen := run.rng()
+	if run.relics.size() < 4 and rng_gen.randf() < 0.6:
+		var all_relics: Array[String] = []
+		for rid in ["old_rope", "chime", "ink_brush", "nail", "well_water", "funeral_bell", "red_thread", "silver_coin", "paper_lantern", "wisp_follower"]:
+			if not run.relics.has(rid):
+				all_relics.append(rid)
+		if not all_relics.is_empty():
+			var relic_id: String = all_relics[rng_gen.randi_range(0, all_relics.size() - 1)]
+			run.relics.append(relic_id)
+			if relic_id == "paper_lantern":
+				run.max_hp += 12
+				run.hp += 12
+		else:
+			run.gold += 40
+	else:
+		run.gold += 30 + rng_gen.randi_range(0, 20)
+	_save_run()
+	_enter(State.MAP)
+
+
+# ————————————————————— 战斗 —————————————————————
+
+func _show_battle() -> void:
+	_hide_all()
+	battle = BattleScene.instantiate()
+	add_child(battle)
+	var node_type := String(run.current_node.get("type", "battle"))
+	var enemy_id := String(run.current_node.get("enemy", "watchman"))
+	# 精英战：血量与伤害小幅上探
+	var mods := run.mods()
+	if node_type == "elite":
+		mods["enemy_hp_mul"] = float(mods.get("enemy_hp_mul", 1.0)) * 1.25
+		mods["enemy_dmg_mul"] = float(mods.get("enemy_dmg_mul", 1.0)) * 1.1
+	mods["reaction_assist"] = GameSettings.reaction_assist
+	mods["flags"] = run.flags
+	battle.apply_run_config(enemy_id, run.deck, run.hp, mods)
+	for ev: Dictionary in battle.sim.drain_begin_events():
+		battle._handle_event(ev)
+	_save_run()
+
+
+func _hide_all() -> void:
+	menu_screen.visible = false
+	map_screen.visible = false
+	reward_screen.visible = false
+	rest_screen.visible = false
+	event_screen.visible = false
+	shop_screen.visible = false
+	over_screen.visible = false
+
+
+func _finish_battle(victory: bool) -> void:
+	last_victory = victory
+	var s = battle.sim
+	if playtest:
+		print("[PLAYTEST] 节点=%s(%s) 敌=%s 结果=%s 灯油=%d/%d 完美x%d 历经%d招 敌余血=%d" % [
+			String(run.current_node.get("type", "battle")), run.node_row, s.enemy_name, "胜" if victory else "负",
+			s.player_hp, s.player_max_hp, s.perfects, s.attack_index + 1, maxi(0, s.enemy_hp)])
+	Telemetry.record_battle(String(run.current_node.get("enemy", "")), victory, s.player_hp, s.attack_index + 1, s.stats)
+	if victory:
+		run.hp = mini(run.max_hp, s.player_hp + int(s.run_mods.get("heal_after_battle", 0)))
+		# 长明等卡在战斗中提升的灯油上限，战后在 Run 层固化
+		var gained := int(s.stats.get("max_hp_gained", 0))
+		if gained > 0:
+			run.max_hp += gained
+		run.battle_count += 1
+		var node_type := String(run.current_node.get("type", "battle"))
+		var base_gold := 12 + (run.node_row * 2) + (randi() % 9)
+		if node_type == "elite":
+			base_gold = int(float(base_gold) * 1.5)
+		pending_gold = int(round(float(base_gold) * float(run.mods().get("gold_mul", 1.0)))) + (8 if run.has_relic("silver_coin") else 0)
+		run.gold += pending_gold
+	else:
+		run.hp = s.player_hp
+	_free_battle()
+	if not victory:
+		_end_run(false)
+	elif String(run.current_node.get("type", "")) == "boss":
+		last_victory = true
+		_end_run(true)
+	else:
+		_enter(State.REWARD)
+
+
+func _free_battle() -> void:
+	if battle:
+		battle.queue_free()
+		battle = null
+
+
+# ————————————————————— 奖励 / 歇脚 / 事件 / 鬼市 —————————————————————
+
+func _show_reward() -> void:
+	var rng_gen := run.rng()
+	var pool: Array[String] = []
+	for cid in BattleSimulationScript.CARD_DATA:
+		pool.append(String(cid))
+	var options: Array[String] = []
+	for want_class in ["御", "斩", ""]:
+		var filtered := pool.filter(func(cid: String): return CardSystemScript.class_of(cid) == want_class and not options.has(cid))
+		if filtered.is_empty():
+			filtered = pool.filter(func(cid: String): return not options.has(cid))
+		options.append(filtered[rng_gen.randi_range(0, filtered.size() - 1)])
+	reward_screen.show_reward(options, pending_gold, run.gold)
+
+
+func _on_reward_picked(index: int) -> void:
+	if state != State.REWARD:
+		return
+	var picked := CardSystemScript.display_id(reward_screen.options[index])
+	run.add_card(picked)
+	Telemetry.record_draft(picked, reward_screen.options, true)
+	_after_node()
+
+
+func _on_reward_skipped() -> void:
+	if state != State.REWARD:
+		return
+	Telemetry.record_draft("", reward_screen.options, false)
+	_after_node()
+
+
+func _after_node() -> void:
+	_save_run()
+	_enter(State.MAP)
+
+
+func _on_rest_choice(kind: String, payload: String) -> void:
+	if state != State.REST:
+		return
+	if kind == "heal":
+		run.heal(int(ceil(float(run.max_hp) * 0.3)))
+	elif kind == "upgrade" and payload != "":
+		run.upgrade_card(payload)
+	_save_run()
+	_enter(State.MAP)
+
+
+func _show_event() -> void:
+	_pending_event_id = String(run.current_node.get("enemy", ""))
+	if _pending_event_id == "":
+		_pending_event_id = _pick_event()
+	var ev: Dictionary = BattleSimulationScript.ContentCatalog.EVENTS.get(_pending_event_id, {})
+	event_screen.show_event(_pending_event_id, ev)
+
+
+func _pick_event() -> String:
+	var rng_gen := run.rng()
+	var keys := BattleSimulationScript.ContentCatalog.EVENTS.keys()
+	return String(keys[rng_gen.randi_range(0, keys.size() - 1)])
+
+
+func _on_event_choice(event_id: String, choice: int) -> void:
+	if state != State.EVENT:
+		return
+	Telemetry.record_event(event_id, choice)
+	var ev: Dictionary = BattleSimulationScript.ContentCatalog.EVENTS.get(event_id, {})
+	var choices: Array = ev.get("choices", [])
+	if choice < choices.size():
+		_apply_event_effects(choices[choice])
+	_save_run()
+	_enter(State.MAP)
+
+
+func _apply_event_effects(choice: Dictionary) -> void:
+	for key in choice.get("flags", {}):
+		run.flags[key] = choice["flags"][key]
+	for eff: Dictionary in choice.get("effects", []):
+		match String(eff.get("type", "")):
+			"heal":
+				run.heal(int(eff.get("amount", 0)))
+			"heal_pct":
+				run.heal(int(ceil(float(run.max_hp) * float(eff.get("pct", 0)) / 100.0)))
+			"gold":
+				run.gold = maxi(0, run.gold + int(eff.get("amount", 0)))
+			"damage":
+				run.hp = maxi(1, run.hp - int(eff.get("amount", 0)))
+			"grant_card":
+				var got := run.random_card_of_class(run.rng(), String(eff.get("class", "")))
+				run.add_card(got)
+			"grant_relic":
+				var rid := String(eff.get("id", ""))
+				if not run.relics.has(rid):
+					run.relics.append(rid)
+					if rid == "paper_lantern":
+						run.max_hp += 12
+						run.hp += 12
+			"remove_card":
+				_remove_after_pick = true
+				pick_overlay.open(run.deck, "选一张符牌，随游魂入灯超度")
+			"upgrade_card":
+				pick_overlay.open(run.upgradable_cards(), "选一张符牌，补完它")
+			"gamble":
+				if run.rng().randf() < 0.5:
+					_apply_event_effects({"effects": [eff["win"]]})
+				else:
+					_apply_event_effects({"effects": [eff["lose"]]})
+
+
+func _on_pick_done(slot: String) -> void:
+	if _remove_after_pick:
+		run.remove_card(slot)
+		_remove_after_pick = false
+	else:
+		run.upgrade_card(slot)
+	_save_run()
+
+
+func _show_shop() -> void:
+	run.shop_visited = true
+	var rng_gen := run.rng()
+	var cards: Array[String] = [run.random_card_of_class(rng_gen), run.random_card_of_class(rng_gen)]
+	var relics: Array[String] = []
+	for rid in ["old_rope", "chime", "ink_brush", "nail", "well_water", "funeral_bell", "red_thread", "silver_coin"]:
+		if not run.relics.has(rid):
+			relics.append(rid)
+	var relic := relics[rng_gen.randi_range(0, relics.size() - 1)] if not relics.is_empty() else ""
+	shop_screen.show_shop(run.gold, cards, relic, run.relics)
+
+
+func _on_shop_buy(item: String, payload: String) -> void:
+	if state != State.SHOP:
+		return
+	match item:
+		"card":
+			if run.gold >= shop_screen.prices["card"]:
+				run.gold -= shop_screen.prices["card"]
+				run.add_card(payload)
+		"relic":
+			if run.gold >= shop_screen.prices["relic"] and not run.relics.has(payload):
+				run.gold -= shop_screen.prices["relic"]
+				run.relics.append(payload)
+				if payload == "paper_lantern":
+					run.max_hp += 12
+					run.hp += 12
+		"remove":
+			if run.gold >= shop_screen.prices["remove"]:
+				run.gold -= shop_screen.prices["remove"]
+				pick_overlay.open(run.deck, "焚符：选一张要烧掉的符牌")
+				return
+		"heal":
+			if run.gold >= shop_screen.prices["heal"]:
+				run.gold -= shop_screen.prices["heal"]
+				run.heal(20)
+	shop_screen.show_shop(run.gold, shop_screen.stock_cards, shop_screen.stock_relic, run.relics)
+	_save_run()
+
+
+func _leave_shop() -> void:
+	if state != State.SHOP:
+		return
+	_after_node()
+
+
+# ————————————————————— 结算 —————————————————————
+
+func _end_run(victory: bool) -> void:
+	Telemetry.end_run("victory" if victory else "death", _node_label(), run.deck, victory)
+	if not playtest:
+		var meta: Dictionary = SaveManagerScript.load_meta()
+		if victory:
+			meta["wins"] = int(meta.get("wins", 0)) + 1
+			if run.difficulty + 1 > int(meta.get("difficulty_unlocked", 0)) and run.difficulty + 1 < BattleSimulationScript.ContentCatalog.DIFFICULTIES.size():
+				meta["difficulty_unlocked"] = run.difficulty + 1
+		meta["best_act_row"] = maxi(int(meta.get("best_act_row", 0)), run.node_row)
+		SaveManagerScript.save_meta(meta)
+		SaveManagerScript.clear_run()
+	over_screen.show_over(victory, _node_label(), run.battle_count, run.deck.size(), false)
+	_enter(State.GAME_OVER)
+
+
+func _node_label() -> String:
+	return "%d/%d" % [run.node_row + 1, run.map.get("rows", []).size()]
+
+
+func abandon_run() -> void:
+	## 战斗暂停菜单选择"离开夜巡"：保留存档，回标题。
+	if run:
+		Telemetry.end_run("abandon", _node_label(), run.deck, false)
+		_save_run()
+	_free_battle()
+	GameTime.reset()
+	_enter(State.MENU)
+
+
+# ————————————————————— 主循环 / playtest —————————————————————
+
 func _process(_delta: float) -> void:
 	if playtest:
-		Engine.time_scale = 4.0
-		if state == State.REWARD:
+		GameTime.base_scale = 4.0
+		if state == State.MAP:
+			# 自动选：优先 歇脚 > 事件 > 战斗
+			var options := _current_map_options()
+			var pick: Dictionary = options[0]
+			for opt in options:
+				if String(opt["node"].get("type", "")) in ["rest", "event"]:
+					pick = opt
+					break
+			_on_node_picked(int(pick["row"]), int(pick["col"]))
+		elif state == State.REWARD:
 			_on_reward_picked(0)
 		elif state == State.EVENT:
-			_on_event_choice(0)
+			_on_event_choice(_pending_event_id, 0)
+			# pick_overlay（删牌/升级）若开着，选第一张
 		elif state == State.REST:
-			_advance_node()
-	if demo_mode:
-		return
-	if playtest:
-		_beat += 1
-		if _beat % 120 == 0:
-			var bs = battle.sim if battle else null
-			print("[HB] state=%s node=%s battle=%s simstate=%s ehp=%s pts=%s hand=%s" % [
-				State.keys()[state], node_name, battle != null,
-				bs.state if bs else "-", bs.enemy_hp if bs else "-",
-				bs.points if bs else "-", str(bs.hand) if bs else "-"])
+			_on_rest_choice("heal", "")
+		elif state == State.SHOP:
+			_leave_shop()
+	if pick_overlay.visible and playtest and run:
+		pick_overlay.visible = false
+		pick_overlay.picked.emit(String(run.deck[0]))
 	if playtest and state == State.BATTLE:
 		_bot_tick()
 	if state != State.BATTLE or battle == null:
@@ -155,206 +521,34 @@ func _process(_delta: float) -> void:
 		_finish_battle(false)
 
 
-func _input(event: InputEvent) -> void:
-	if demo_mode and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		_end_demo()
-		get_viewport().set_input_as_handled()
-
-
-func _show_menu() -> void:
-	_free_battle()
-	menu_layer.visible = true
-	reward_layer.visible = false
-	over_layer.visible = false
-	rest_layer.visible = false
-	event_layer.visible = false
-	battle_layer.visible = false
-	flow_layer.visible = false
-
-
-func _show_battle() -> void:
-	menu_layer.visible = false
-	reward_layer.visible = false
-	over_layer.visible = false
-	rest_layer.visible = false
-	event_layer.visible = false
-	battle_layer.visible = true
-	flow_layer.visible = true
-	battle = BattleScene.instantiate()
-	battle_layer.add_child(battle)
-	battle.apply_run_config(node_enemy, run_deck.duplicate())
-	battle.sim.player_hp = run_hp
-	node_label.text = {"elite": "精英战", "boss": "头目战"}.get(node_name, "第 %d 场" % (_cleared_count() + 1))
-
-
-func _cleared_count() -> int:
-	return NODE_TABLE.size() - node_queue.size() - 1
-
-
-func _show_reward() -> void:
-	rest_layer.visible = false
-	event_layer.visible = false
-	reward_layer.visible = true
-	draft_options.clear()
-	var pool := DRAFT_POOL.duplicate()
-	var yu_pool: Array = pool.filter(func(cid: String): return BattleSimulationScript.CARD_DATA[cid]["class"] == "御")
-	var yu: String = yu_pool[rng.randi_range(0, yu_pool.size() - 1)]
-	draft_options.append(yu)
-	pool.erase(yu)
-	var zha_pool: Array = pool.filter(func(cid: String): return BattleSimulationScript.CARD_DATA[cid]["class"] == "斩")
-	var zha: String = zha_pool[rng.randi_range(0, zha_pool.size() - 1)]
-	draft_options.append(zha)
-	pool.erase(zha)
-	var idx := rng.randi_range(0, pool.size() - 1)
-	draft_options.append(pool.pop_at(idx))
-	reward_title.text = "怨契三选一｜第 %d / %d 场后" % [_cleared_count(), NODE_TABLE.size()]
-	for i in 3:
-		var button: Button = reward_layer.get_node("Card%d" % i)
-		var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[draft_options[i]]
-		var gdata: Dictionary = BattleSimulationScript.CARD_DATA[draft_options[i]]
-		button.text = "%s\n%s·%d点\n%s" % [pres.title, gdata["class"], gdata.cost, _card_flavor(draft_options[i])]
-		button.disabled = false
-
-
-func _show_rest() -> void:
-	rest_layer.visible = true
-	run_hp = mini(72, run_hp + 20)
-	rest_body.text = "长明灯旁添一次油\n灯油 +20（当前 %d/72）" % run_hp
-	if playtest:
-		print("[PLAYTEST] 篝火歇脚｜灯油回复至 %d/72" % run_hp)
-
-
-func _show_event() -> void:
-	pending_event_id = node_enemy
-	var ev: Dictionary = EVENTS.get(pending_event_id, EVENTS.paper_clue)
-	rest_layer.visible = false
-	event_layer.visible = true
-	event_title.text = String(ev.title)
-	event_body.text = String(ev.body)
-	event_choice_a.text = String(ev.a)
-	event_choice_b.text = String(ev.b)
-	if playtest:
-		print("[PLAYTEST] 事件=%s｜%s" % [ev.title, ev.body])
+func _current_map_options() -> Array:
+	var map_gen: MapGenScript = MapGenScript.new()
+	if run.node_row == 0 and run.node_col == 0 and run.current_node.is_empty():
+		var rows: Array = run.map.get("rows", [])
+		var out: Array = []
+		for c in rows[0].size():
+			out.append({"row": 0, "col": c, "node": rows[0][c]})
+		return out
+	return map_gen.next_options(run.map, run.node_row, run.node_col)
 
 
 func _show_over() -> void:
 	if playtest:
 		playtest_runs += 1
-		print("[PLAYTEST] ===第 %d 次尝试结束：%s｜牌组=%s===" % [playtest_runs, "天明" if last_victory else "灯灭", str(run_deck)])
+		print("[PLAYTEST] ===第 %d 次尝试结束：%s｜牌组=%s===" % [playtest_runs, "天明" if last_victory else "灯灭", str(run.deck)])
 		if playtest_runs < 6 and not last_victory:
-			_enter(State.MENU)
-			start_run()
+			_start_new_run(0, 0)
 			return
 		print("[PLAYTEST] 全局结束：%s" % ["通关" if last_victory else "未能通关"])
 		get_tree().quit(0)
-	over_layer.visible = true
-	if last_victory:
-		over_title.text = "夜 尽 天 明"
-		over_title.add_theme_color_override("font_color", Color("f1d185"))
-		over_sub.text = "秤砣归位，众怨过河。你走完了三程路。"
-	else:
-		over_title.text = "灯 灭 了"
-		over_title.add_theme_color_override("font_color", Color("cf5555"))
-		over_sub.text = "第 %d 场，执灯人倒在了更路上。" % (_cleared_count() + 1)
-
-
-func start_run() -> void:
-	run_hp = 72
-	run_deck.clear()
-	for id in BASE_DECK:
-		run_deck.append(String(id))
-	node_queue = NODE_TABLE.duplicate()
-	_advance_node()
-
-
-func _advance_node() -> void:
-	var node: Array = node_queue.pop_front()
-	node_name = String(node[0])
-	node_enemy = String(node[1])
-	match node_name:
-		"rest":
-			_enter(State.REST)
-		"event":
-			_enter(State.EVENT)
-		_:
-			_enter(State.BATTLE)
-
-
-func _finish_battle(victory: bool) -> void:
-	if battle:
-		run_hp = battle.sim.player_hp
-	last_victory = victory
-	if playtest and battle:
-		var s = battle.sim
-		print("[PLAYTEST] 节点=%s(%s) 敌=%s 结果=%s 灯油=%d/72 完美x%d 历经%d招 敌余血=%d" % [
-			node_name, node_enemy, s.enemy_name, "胜" if victory else "负",
-			s.player_hp, s.perfects, s.attack_index + 1, maxi(0, s.enemy_hp)])
-	if playtest and not victory:
-		print("[PLAYTEST] 夜巡失败，结束于第 %d 场" % (_cleared_count() + 1))
-	_free_battle()
-	if not victory:
-		_enter(State.GAME_OVER)
-	elif node_queue.is_empty():
-		last_victory = true
-		_enter(State.GAME_OVER)
-	else:
-		_enter(State.REWARD)
-
-
-func _free_battle() -> void:
-	if battle:
-		battle.queue_free()
-		battle = null
-
-
-func _on_reward_picked(index: int) -> void:
-	if state != State.REWARD or index >= draft_options.size():
 		return
-	run_deck.append(draft_options[index])
-	_advance_node()
+	over_screen.visible = true
 
 
-func _on_reward_skipped() -> void:
-	if state != State.REWARD:
-		return
-	_advance_node()
-
-
-func _on_event_choice(choice: int) -> void:
-	if state != State.EVENT:
-		return
-	match pending_event_id:
-		"paper_clue":
-			if choice == 0:
-				run_hp = mini(72, run_hp + 12)
-				print("[PLAYTEST] 事件选择 A：灯油 +12")
-			else:
-				run_deck.append(DRAFT_POOL[rng.randi_range(0, DRAFT_POOL.size() - 1)])
-				print("[PLAYTEST] 事件选择 B：符牌入手")
-		"gambler_debt":
-			if choice == 0:
-				if rng.randf() < 0.5:
-					run_deck.append(DRAFT_POOL[rng.randi_range(0, DRAFT_POOL.size() - 1)])
-					print("[PLAYTEST] 赌局：赢了，得一张符牌")
-				else:
-					run_hp = maxi(1, run_hp - 12)
-					print("[PLAYTEST] 赌局：输了，灯油 -12")
-			else:
-				print("[PLAYTEST] 不赌，转身离开")
-	_advance_node()
-
-
-func _restart_battle() -> void:
-	pass
-
-
-func _card_flavor(id: String) -> String:
-	var flavors := {
-		"attack": "散去 5 点怨气", "shatter": "12 伤·僵直中 +6", "guard": "6 伤·凝滞", "shift": "回 7 灯油",
-		"duannian": "8 伤·弃一张手牌", "dengxin": "回 4 灯油", "zhuangzhong": "5 伤·凝滞 0.2s",
-		"anhun": "净化：鬼手改为可防范",
-	}
-	return flavors.get(id, "")
+func _input(event: InputEvent) -> void:
+	if demo_mode and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_end_demo()
+		get_viewport().set_input_as_handled()
 
 
 func _load_strategy() -> void:
@@ -426,158 +620,20 @@ func _bot_play_cards() -> void:
 		battle._submit({"type": "play_card", "id": "zhuangzhong"})
 
 
+# ————————————————————— 旧日试炼（demo） —————————————————————
+
 func _start_demo() -> void:
-	menu_layer.visible = false
-	reward_layer.visible = false
-	over_layer.visible = false
-	rest_layer.visible = false
-	event_layer.visible = false
-	battle_layer.visible = true
+	_hide_all()
+	menu_screen.visible = false
 	demo_mode = true
-	demo_hint.visible = true
 	battle = BattleScene.instantiate()
-	battle_layer.add_child(battle)
+	add_child(battle)
+	battle.sim.initial_hp = BattleSimulationScript.PLAYER_MAX_HP
+	battle.sim.restart()
 
 
 func _end_demo() -> void:
 	demo_mode = false
-	demo_hint.visible = false
 	_free_battle()
+	GameTime.reset()
 	_enter(State.MENU)
-
-
-func _build_menu() -> void:
-	menu_layer.add_child(_dim(Color(0.02, 0.02, 0.03)))
-	var title := _label(Vector2(340, 200), Vector2(600, 90), 64, Color("f1d185"), true)
-	title.text = "了  断"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_layer.add_child(title)
-	var sub := _label(Vector2(340, 300), Vector2(600, 40), 20, Color("9caaa9"), false)
-	sub.text = "灯照本相，怨还其身"
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_layer.add_child(sub)
-	var start := _button(Vector2(490, 400), Vector2(300, 64), "开始夜巡")
-	start.pressed.connect(start_run)
-	menu_layer.add_child(start)
-	var demo := _button(Vector2(490, 478), Vector2(300, 52), "旧日试炼 [开发]")
-	demo.pressed.connect(_start_demo)
-	menu_layer.add_child(demo)
-	var quit := _button(Vector2(490, 544), Vector2(300, 44), "退出")
-	quit.pressed.connect(func(): get_tree().quit())
-	menu_layer.add_child(quit)
-	var controls := _label(Vector2(340, 620), Vector2(600, 30), 16, Color("7a7264"), false)
-	controls.text = "Space 防范 · 1-4 符牌 · 5 召符 · Esc 菜单"
-	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_layer.add_child(controls)
-	demo_hint = _label(Vector2(340, 40), Vector2(600, 30), 16, Color("9caaa9"), false)
-	demo_hint.text = "旧日试炼（开发验证）· Esc 返回标题"
-	demo_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	demo_hint.visible = false
-	menu_layer.add_child(demo_hint)
-
-
-func _build_reward() -> void:
-	reward_layer.add_child(_dim(Color(0.05, 0.03, 0.03, 0.86)))
-	reward_title = _label(Vector2(240, 130), Vector2(800, 50), 34, Color("f2d487"), true)
-	reward_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	reward_layer.add_child(reward_title)
-	for i in 3:
-		var button := _button(Vector2(240 + i * 280, 260), Vector2(240, 200), "")
-		button.name = "Card%d" % i
-		button.add_theme_font_size_override("font_size", 24)
-		button.pressed.connect(_on_reward_picked.bind(i))
-		reward_layer.add_child(button)
-	var skip := _button(Vector2(500, 520), Vector2(280, 52), "跳过（继续上路）")
-	skip.pressed.connect(_on_reward_skipped)
-	reward_layer.add_child(skip)
-
-
-func _build_flow_ui() -> void:
-	flow_layer.visible = false
-	rest_layer.add_child(_dim(Color(0.02, 0.03, 0.02, 0.88)))
-	var rpanel := Panel.new()
-	rpanel.position = Vector2(440, 220)
-	rpanel.size = Vector2(400, 260)
-	rpanel.add_theme_stylebox_override("panel", _style_box(Color(0.03, 0.03, 0.045, 0.97), Color("6d9663"), 16, 2))
-	rest_layer.add_child(rpanel)
-	var rtitle := _label(Vector2(20, 40), Vector2(360, 48), 32, Color("aad18f"), true)
-	rtitle.text = "城隍歇脚"
-	rtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rpanel.add_child(rtitle)
-	rest_body = _label(Vector2(20, 110), Vector2(360, 60), 18, Color("c8bb9d"), false)
-	rest_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rest_body.text = "长明灯旁添一次油\n灯油 +20"
-	rpanel.add_child(rest_body)
-	var rgo := _button(Vector2(60, 190), Vector2(280, 48), "继续夜巡")
-	rgo.pressed.connect(func(): _advance_node())
-	rpanel.add_child(rgo)
-
-	event_layer.add_child(_dim(Color(0.03, 0.02, 0.03, 0.88)))
-	var epanel := Panel.new()
-	epanel.position = Vector2(390, 170)
-	epanel.size = Vector2(500, 360)
-	epanel.add_theme_stylebox_override("panel", _style_box(Color(0.03, 0.03, 0.045, 0.97), Color("8a6a3a"), 16, 2))
-	event_layer.add_child(epanel)
-	event_title = _label(Vector2(20, 34), Vector2(460, 44), 28, Color("f1d185"), true)
-	event_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	epanel.add_child(event_title)
-	event_body = _label(Vector2(36, 100), Vector2(428, 110), 17, Color("c8bb9d"), false)
-	event_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	epanel.add_child(event_body)
-	event_choice_a = _button(Vector2(40, 240), Vector2(420, 46), "")
-	event_choice_a.pressed.connect(_on_event_choice.bind(0))
-	epanel.add_child(event_choice_a)
-	event_choice_b = _button(Vector2(40, 296), Vector2(420, 46), "")
-	event_choice_b.pressed.connect(_on_event_choice.bind(1))
-	epanel.add_child(event_choice_b)
-
-
-func _build_over() -> void:
-	over_layer.add_child(_dim(Color(0.01, 0.01, 0.02, 0.92)))
-	over_title = _label(Vector2(240, 220), Vector2(800, 80), 52, Color("f1d185"), true)
-	over_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	over_layer.add_child(over_title)
-	over_sub = _label(Vector2(240, 330), Vector2(800, 40), 20, Color("c8bb9d"), false)
-	over_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	over_layer.add_child(over_sub)
-	var menu_btn := _button(Vector2(490, 460), Vector2(300, 60), "回到长夜")
-	menu_btn.pressed.connect(func(): _enter(State.MENU))
-	over_layer.add_child(menu_btn)
-
-
-func _dim(color: Color) -> ColorRect:
-	var rect := ColorRect.new()
-	rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	rect.color = color
-	return rect
-
-
-func _label(pos: Vector2, size: Vector2, font_size: int, color: Color, bold: bool) -> Label:
-	var label := Label.new()
-	label.position = pos
-	label.size = size
-	label.add_theme_font_size_override("font_size", font_size + (1 if bold else 0))
-	label.add_theme_color_override("font_color", color)
-	return label
-
-
-func _button(pos: Vector2, size: Vector2, text: String) -> Button:
-	var button := Button.new()
-	button.position = pos
-	button.size = size
-	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_font_size_override("font_size", 22)
-	button.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
-	var sb_hover := _style_box(Color("493126"), Color("e0ad58"), 12, 3)
-	button.add_theme_stylebox_override("hover", sb_hover)
-	return button
-
-
-func _style_box(bg: Color, border: Color, radius: int, width: int) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = bg
-	box.border_color = border
-	box.set_border_width_all(width)
-	box.set_corner_radius_all(radius)
-	return box

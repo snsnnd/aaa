@@ -2,15 +2,19 @@ extends Node2D
 
 ## 组合根：创建模拟层与表现层、路由输入与事件。
 ## 规则在 BattleSimulation，世界表现在 BattleView，UI 在 BattleHud。
+## 输入统一走 InputMap 动作（GameSettings 管重映射），时间统一走 GameTime。
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const BattleViewScript := preload("res://scripts/presentation/battle_view.gd")
 const BattleHudScript := preload("res://scripts/presentation/battle_hud.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
+const CardSystemScript := preload("res://scripts/battle/card_system.gd")
+const TutorialScript := preload("res://scripts/app/tutorial.gd")
 
 var sim: BattleSimulationScript
 var view: BattleViewScript
 var hud: BattleHudScript
+var tutorial: TutorialScript
 var ai_mode := false
 var ai_wait := false
 var ai_defend := ""
@@ -53,8 +57,10 @@ func _ready() -> void:
 	view.setup(sim)
 	hud = BattleHudScript.new()
 	add_child(hud)
-	hud.setup(sim, _submit, _restart_battle)
+	hud.setup(sim, _submit, _restart_battle, _abandon_run)
+	tutorial = TutorialScript.new()
 	_apply_attack_presentation()
+	hud.show_message("—— 巡更备战 · 凝神 ——", Color("e2cf9c"), 1.2)
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		call_deferred("_run_smoke_test")
 	if "--ai-decide" in OS.get_cmdline_user_args():
@@ -63,12 +69,12 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Engine.time_scale = 1.0
+	GameTime.reset()
 
 
 func _process(delta: float) -> void:
 	if ai_mode:
-		Engine.time_scale = 6.0
+		GameTime.base_scale = 6.0
 		if ai_wait:
 			if FileAccess.file_exists(AI_CMD):
 				_ai_load_cmd()
@@ -124,7 +130,7 @@ func _ai_dump_state() -> void:
 	var fake: float = sim.current_intent.get("fake", -1.0)
 	var hand := []
 	for id in sim.hand:
-		hand.append("%s(%d点·%s)" % [id, BattleSimulationScript.CARD_DATA[id].cost, BattleSimulationScript.CARD_DATA[id]["class"]])
+		hand.append("%s(%d点·%s)" % [id, CardSystemScript.cost_of(id), CardSystemScript.class_of(id)])
 	var phases := []
 	for ph in sim.current_intent.get("phases", []):
 		phases.append("%s→%.2f" % [ph.name, float(ph.until)])
@@ -134,7 +140,7 @@ func _ai_dump_state() -> void:
 		sim.current_intent.title, "【不可防范】" if unblockable else "",
 		", ".join(phases), impact, int(sim.current_intent.damage),
 		"假释放@%.2f" % fake if fake >= 0 else "",
-		sim.player_hp, BattleSimulationScript.PLAYER_MAX_HP, sim.points, sim.defense_cooldown, str(hand),
+		sim.player_hp, sim.player_max_hp, sim.points, sim.defense_cooldown, str(hand),
 	]
 	print(text)
 	var f := FileAccess.open(AI_STATE, FileAccess.WRITE)
@@ -196,44 +202,28 @@ func _ai_execute() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not event is InputEventKey:
-		return
-	if not event.pressed or event.echo:
-		return
-	if _handle_shortcut(event.keycode):
-		get_viewport().set_input_as_handled()
-
-
-func _handle_shortcut(keycode: Key) -> bool:
 	if hud.menu_open:
-		match keycode:
-			KEY_ESCAPE:
-				hud.toggle_menu()
-			KEY_R:
-				_restart_battle()
-			_:
-				return false
-		return true
-	match keycode:
-		KEY_1:
-			_play_hand_slot(0)
-		KEY_2:
-			_play_hand_slot(1)
-		KEY_3:
-			_play_hand_slot(2)
-		KEY_4:
-			_play_hand_slot(3)
-		KEY_5:
-			_submit({"type": "summon"})
-		KEY_SPACE:
-			_submit({"type": "defend"})
-		KEY_ESCAPE:
+		if event.is_action_pressed("pause"):
 			hud.toggle_menu()
-		KEY_R:
+		elif event.is_action_pressed("restart"):
 			_restart_battle()
-		_:
-			return false
-	return true
+		return
+	if event.is_action_pressed("card_1"):
+		_play_hand_slot(0)
+	elif event.is_action_pressed("card_2"):
+		_play_hand_slot(1)
+	elif event.is_action_pressed("card_3"):
+		_play_hand_slot(2)
+	elif event.is_action_pressed("card_4"):
+		_play_hand_slot(3)
+	elif event.is_action_pressed("summon"):
+		_submit({"type": "summon"})
+	elif event.is_action_pressed("defend"):
+		_submit({"type": "defend"})
+	elif event.is_action_pressed("pause"):
+		hud.toggle_menu()
+	elif event.is_action_pressed("restart"):
+		_restart_battle()
 
 
 func _play_hand_slot(slot: int) -> void:
@@ -246,11 +236,55 @@ func _submit(command: Dictionary) -> void:
 		_handle_event(event)
 
 
+func _abandon_run() -> void:
+	## 暂停菜单里的"离开夜巡"：保存并回到流程层标题。
+	var parent := get_parent()
+	if parent and parent.has_method("abandon_run"):
+		parent.abandon_run()
+
+
 func _handle_event(event: Dictionary) -> void:
+	# 教学：事件驱动提示
+	var hint := tutorial.handle_event(event, sim)
+	if hint != "":
+		hud.show_message(hint, Color("9ab0a2"), 2.4)
+	# 遥测
+	match String(event.get("type", "")):
+		"defense_miss":
+			Telemetry.record_defense(String(sim.current_intent.id), 0)
+		"impact":
+			Telemetry.record_defense(String(sim.current_intent.id), int(event.grade))
+		"card_played":
+			Telemetry.record_card_play(String(event.id), CardSystemScript.cost_of(String(event.id)))
+		"card_summoned":
+			Telemetry.record_summon(int(event.get("cost", 2)))
 	match String(event.get("type", "")):
 		"attack_started":
 			_apply_attack_presentation()
 			hud.refresh()
+		"trait_intro":
+			hud.show_message(String(event.get("text", "")), Color("c8b46a"), 2.2)
+		"enemy_phase":
+			view.commit_flash(GameSettings.adjust_color(Color("f2d487")))
+			view.add_trauma(0.5)
+			hud.show_message("【%s】%s" % [event.get("title", "变"), event.get("announce", "")], Color("f2d487"), 2.6)
+		"dice_roll":
+			hud.show_message(String(event.get("text", "")), Color("e0b45c"), 1.6)
+		"vengeance_up":
+			hud.show_message("看守记仇——这一刀重了 6 点", Color("d85151"), 1.4)
+		"armor_broken":
+			hud.show_message("纸胎甲破！符牌伤害恢复全额", Color("f2d487"), 1.6)
+		"card_pulled":
+			var pulled_display := CardSystemScript.display_id(String(event.id))
+			hud.show_message("你的【%s】被拖进了水里" % PresentationCatalog.CARD_PRESENTATION[pulled_display]["title"], Color("9ab0a2"), 1.6)
+		"impact_delayed":
+			hud.show_message("鬼招被延后了", Color("7fc5cd"), 0.8)
+		"strike_skipped":
+			hud.show_message("一段命中被抹去！", Color("7fc5cd"), 0.9)
+		"scry_offer":
+			hand_view().show_scry(event.get("options", []))
+		"scry_done":
+			hand_view().close_scry()
 		"commit_cue":
 			view.commit_flash(view.intent_color())
 			view.enemy_cue_fx(String(event.get("enemy", "")), String(event.get("intent", "")))
@@ -286,10 +320,12 @@ func _handle_event(event: Dictionary) -> void:
 		"card_played":
 			_present_card(event)
 			hud.rebuild_pile_view()
+		"charged_bonus":
+			view.small_enemy_hit(0.32)
 		"card_summoned":
 			view.pulse_glow(0.5)
-			view.summon_vfx(String(event.id))
-			hud.show_message("召符·%s" % BattleSimulationScript.CARD_DATA[String(event.id)].title, Color("f2d487"), 0.7)
+			view.summon_vfx(CardSystemScript.display_id(String(event.id)))
+			hud.show_message("召符·%s" % CardSystemScript.title_of(String(event.id)), Color("f2d487"), 0.7)
 			hud.rebuild_hand()
 			hud.rebuild_pile_view()
 			hud.refresh()
@@ -310,6 +346,10 @@ func _handle_event(event: Dictionary) -> void:
 			view.finish_action_fx()
 		"victory", "defeat":
 			_present_battle_end(String(event.get("type", "")) == "victory")
+
+
+func hand_view() -> Control:
+	return hud.hand_view
 
 
 func _apply_attack_presentation() -> void:
@@ -340,9 +380,10 @@ func _present_impact(event: Dictionary) -> void:
 func _present_card(event: Dictionary) -> void:
 	view.play_card_sfx()
 	var id := String(event.id)
-	view.spawn_talisman(id)
-	var data: Dictionary = PresentationCatalog.CARD_PRESENTATION[id]
-	match id:
+	var display_id := CardSystemScript.display_id(id)
+	view.spawn_talisman(display_id)
+	var data: Dictionary = PresentationCatalog.CARD_PRESENTATION[display_id]
+	match display_id:
 		"attack":
 			view.paper_burst()
 		"shatter":
@@ -353,26 +394,29 @@ func _present_card(event: Dictionary) -> void:
 			view.embers()
 		"duannian":
 			view.paper_burst(Color("c98a7a"))
-		"dengxin":
+		"dengxin", "tianyou", "jieshou":
 			view.embers()
 			view.pulse_glow(0.35)
 		"zhuangzhong":
 			view.bell_wave()
-		"anhun":
+		"anhun", "jieshi", "tongjing", "baiguyin", "difan", "fuhunsuo", "jiedao", "jinshen", "podan", "duanxiang", "yandeng", "jiezou", "huangdeng", "chageng", "wenlu", "tinggeng":
 			view.seal_ring()
-	if id == "shift":
-		if int(event.healed) > 0:
-			hud.show_message("续灯｜灯油 +%d" % int(event.healed), data.color, 0.7)
-		else:
-			hud.show_message("灯火已盈", data.color, 0.5)
-	elif id == "shatter" and bool(event.get("charged", false)):
-		view.small_enemy_hit(0.32)
-		hud.show_message("还刃·乘势｜怨气 -%d" % int(event.damage), data.color, 0.8)
-	elif id == "guard":
-		hud.show_message("镇煞｜怨气 -%d，鬼招凝滞" % int(event.damage), data.color, 0.7)
-	else:
+	if event.has("healed") and int(event.healed) > 0:
+		hud.show_message("%s｜灯油 +%d" % [data["title"], int(event.healed)], data.color, 0.7)
+	elif event.has("max_hp"):
+		hud.show_message("长明｜灯油上限 +%d" % int(event.max_hp), data.color, 0.9)
+	elif event.has("damage") and int(event.damage) > 0:
 		view.small_enemy_hit(0.16)
-		hud.show_message("%s｜散去 %d 点怨气" % [data.title, int(event.damage)], data.color, 0.6)
+		hud.show_message("%s｜散去 %d 点怨气" % [data["title"], int(event.damage)], data.color, 0.6)
+	elif event.has("scry"):
+		hud.show_message("问路｜选一张顺手的符牌", data.color, 0.9)
+	elif event.has("next_move"):
+		var warn := "（不可防范！）" if bool(event.get("unblockable", false)) else ""
+		hud.show_message("听更｜下一招：%s%s" % [event.next_move, warn], data.color, 1.2)
+	elif event.has("summon"):
+		hud.show_message("%s｜召回 %d 张符牌" % [data["title"], int(event.summon)], data.color, 0.7)
+	else:
+		hud.show_message("%s" % data["title"], data.color, 0.5)
 	hud.rebuild_hand()
 	hud.refresh()
 
@@ -388,8 +432,12 @@ func _present_battle_end(victory: bool) -> void:
 	get_tree().create_timer(1.3, true, false, true).timeout.connect(func(): hud.show_settlement(victory))
 
 
-func apply_run_config(enemy_id: String, deck: Array) -> void:
+func apply_run_config(enemy_id: String, deck: Array, current_hp: int = -1, mods: Dictionary = {}) -> void:
 	sim.enemy_id = enemy_id
+	sim.run_mods = mods
+	sim.story_flags = mods.get("flags", {})
+	if current_hp > 0:
+		sim.initial_hp = current_hp
 	var deck_copy: Array[String] = []
 	for id in deck:
 		deck_copy.append(String(id))
@@ -402,11 +450,14 @@ func apply_run_config(enemy_id: String, deck: Array) -> void:
 
 
 func _restart_battle() -> void:
+	## Run 内重开：回到本战开局的血量（initial_hp），不是满血。
 	hud.close_menu()
 	hud.hide_settlement()
 	view.restart_fx()
 	sim.restart()
 	_apply_attack_presentation()
+	for ev: Dictionary in sim.drain_begin_events():
+		_handle_event(ev)
 	hud.rebuild_hand()
 	hud.rebuild_pile_view()
 	hud.refresh()
@@ -459,7 +510,6 @@ func _run_smoke_test() -> void:
 	else:
 		var attack_before: int = s.hand.count("attack")
 		s.submit({"type": "play_card", "id": "attack"})
-		print("[DBG] else分支: points=%d enemy=%d hand=%s" % [s.points, s.enemy_hp, str(s.hand)])
 		assert(s.enemy_hp == 46 - 5 and s.points >= 0)
 		assert(s.hand.count("attack") == attack_before - 1)
 	if s.points >= BattleSimulationScript.SUMMON_COST and s.hand.size() < BattleSimulationScript.HAND_SIZE:
@@ -504,7 +554,7 @@ func _run_smoke_test() -> void:
 		tween.kill()
 	for player: AudioStreamPlayer in [view.parry_audio, view.hurt_audio, view.card_audio, view.warning_audio]:
 		player.stop()
-	Engine.time_scale = 1.0
+	GameTime.reset()
 	await get_tree().process_frame
 	await get_tree().process_frame
 	get_tree().quit(0)

@@ -35,6 +35,10 @@ const CARD_PRESENTATION := {
 	"zhima": {"title": "纸马", "color": Color("92b884"), "icon": "res://assets/game/cards/card_zhima.png"},
 	"changming": {"title": "长明", "color": Color("e8b04a"), "icon": "res://assets/game/cards/card_changming.png"},
 	"jieshou": {"title": "借寿", "color": Color("d85248"), "icon": "res://assets/game/cards/card_jieshou.png"},
+	"yandeng": {"title": "延灯", "color": Color("8ac0b8"), "icon": "res://assets/game/cards/card_yandeng.png"},
+	"jiezou": {"title": "劫奏", "color": Color("6aa8c8"), "icon": "res://assets/game/cards/card_jiezou.png"},
+	"huangdeng": {"title": "晃灯", "color": Color("c8c08a"), "icon": "res://assets/game/cards/card_huangdeng.png"},
+	"chageng": {"title": "查更", "color": Color("9ec0a8"), "icon": "res://assets/game/cards/card_chageng.png"},
 }
 
 const CARD_FRAMES := {
@@ -61,6 +65,22 @@ const MOVE_PRESENTATION := {
 	"blue": {"color": Color("43a9b2")},
 	"green": {"color": Color("6d9663")},
 	"quick": {"color": Color("d0a45c")},
+	"gamble_dice": {"color": Color("e0b45c")},
+	"gamble_flip": {"color": Color("bd3d45")},
+	"sisters_twin_whip": {"color": Color("43a9b2")},
+	"sisters_drag": {"color": Color("3a8a8e")},
+	"paper_storm": {"color": Color("d8ceb0")},
+	"corpse_gong": {"color": Color("8f7a3f")},
+	"boss_ceremony": {"color": Color("f2d487")},
+	"boss_flame_domain": {"color": Color("e55238")},
+	"paper_funeral_kite": {"color": Color("d8c8a0")},
+	"corpse_shroud_slam": {"color": Color("9a8a4a")},
+	"razor_waltz": {"color": Color("d0989a")},
+	"shear_bind": {"color": Color("b88a9a")},
+	"imp_flame_leap": {"color": Color("e0884a")},
+	"keeper_ash_rain": {"color": Color("c8b898")},
+	"keeper_wick_snuff": {"color": Color("c83a2a")},
+	"keeper_finale": {"color": Color("e86a3a")},
 }
 
 const MOVE_ANIMATIONS := {
@@ -91,6 +111,118 @@ const MOVE_ANIMATIONS := {
 		"weapon_rot": [-0.45, -2.02, -0.20],
 		"body_x": [1006.0, 760.0],
 		"hand_reach": Vector2(-540, -18)
+	},
+	"gamble_dice": {
+		"type": "combo_strikes",
+		"raise_end": 0.50,
+		"weapon_rot": [-0.45, -1.50, 1.10],
+		"body_x": [1006.0, 1012.0, 640.0],
+		"body_rot": [0.0, 0.04, -0.08]
+	},
+	"gamble_flip": {
+		"type": "grab_reach",
+		"cancel_point": 0.60,
+		"weapon_rot": [-0.45, -2.20, 0.40],
+		"body_x": [1006.0, 720.0],
+		"hand_reach": Vector2(-500, -20)
+	},
+	"sisters_twin_whip": {
+		"type": "combo_strikes",
+		"raise_end": 0.60,
+		"weapon_rot": [-0.45, -1.80, 1.30],
+		"body_x": [1006.0, 1015.0, 570.0],
+		"body_rot": [0.0, 0.03, -0.10]
+	},
+	"sisters_drag": {
+		"type": "grab_reach",
+		"cancel_point": 0.55,
+		"weapon_rot": [-0.45, -1.80, -0.10],
+		"body_x": [1006.0, 750.0],
+		"hand_reach": Vector2(-550, -10)
+	},
+	"paper_storm": {
+		"type": "combo_strikes",
+		"raise_end": 0.50,
+		"weapon_rot": [-0.45, -1.40, 1.00],
+		"body_x": [1006.0, 1008.0, 600.0],
+		"body_rot": [0.0, 0.02, -0.06]
+	},
+	"corpse_gong": {
+		"type": "combo_strikes",
+		"raise_end": 0.55,
+		"weapon_rot": [-0.45, -1.60, 1.35],
+		"body_x": [1006.0, 1018.0, 580.0],
+		"body_rot": [0.0, 0.02, -0.14]
+	},
+	"boss_ceremony": {
+		"type": "combo_strikes",
+		"raise_end": 0.60,
+		"weapon_rot": [-0.45, -2.10, 1.45],
+		"body_x": [1006.0, 1025.0, 550.0],
+		"body_rot": [0.0, 0.04, -0.16]
+	},
+	"boss_flame_domain": {
+		"type": "grab_reach",
+		"cancel_point": 0.60,
+		"weapon_rot": [-0.45, -2.40, 0.0],
+		"body_x": [1006.0, 700.0],
+		"hand_reach": Vector2(-560, -30)
+	},
+	"paper_funeral_kite": {
+		"type": "delayed_strike",
+		"raise_end": 0.34, "hold_end": 0.68,
+		"weapon_rot": [-0.45, -2.10, 1.30],
+		"body_x": [1006.0, 1015.0, 590.0],
+		"body_rot": [0.0, 0.03, -0.12]
+	},
+	"corpse_shroud_slam": {
+		"type": "delayed_strike",
+		"raise_end": 0.40, "hold_end": 0.76,
+		"weapon_rot": [-0.45, -2.30, 1.45],
+		"body_x": [1006.0, 1022.0, 570.0],
+		"body_rot": [0.0, 0.05, -0.15]
+	},
+	"razor_waltz": {
+		"type": "combo_strikes",
+		"raise_end": 0.48,
+		"weapon_rot": [-0.45, -1.55, 1.15],
+		"body_x": [1006.0, 1009.0, 610.0],
+		"body_rot": [0.0, 0.02, -0.07]
+	},
+	"shear_bind": {
+		"type": "delayed_strike",
+		"raise_end": 0.38, "hold_end": 0.72,
+		"weapon_rot": [-0.45, -2.05, 1.25],
+		"body_x": [1006.0, 1014.0, 600.0],
+		"body_rot": [0.0, 0.03, -0.11]
+	},
+	"imp_flame_leap": {
+		"type": "delayed_strike",
+		"raise_end": 0.32, "hold_end": 0.60,
+		"weapon_rot": [-0.45, -1.95, 1.20],
+		"body_x": [1006.0, 1012.0, 575.0],
+		"body_rot": [0.0, 0.03, -0.10]
+	},
+	"keeper_ash_rain": {
+		"type": "combo_strikes",
+		"raise_end": 0.42,
+		"weapon_rot": [-0.45, -1.50, 1.05],
+		"body_x": [1006.0, 1008.0, 620.0],
+		"body_rot": [0.0, 0.02, -0.06]
+	},
+	"keeper_wick_snuff": {
+		"type": "grab_reach",
+		"cancel_point": 0.62,
+		"weapon_rot": [-0.45, -2.45, 0.05],
+		"body_x": [1006.0, 690.0],
+		"hand_reach": Vector2(-570, -26)
+	},
+	"keeper_finale": {
+		"type": "combo_strikes",
+		"raise_end": 0.55,
+		"weapon_rot": [-0.45, -2.15, 1.40],
+		"body_x": [1006.0, 1020.0, 560.0],
+		"body_rot": [0.0, 0.04, -0.15]
 	}
 }
 

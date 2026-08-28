@@ -121,3 +121,41 @@
   - **4 套着色器**：屏幕折射色差冲击波、符纸燃烧消散、幽冥鬼雾流动、HDR 呼吸叠加光。
   - **交互式预览器**：`vfx_preview_gallery.tscn`，支持 F6 直接运行交互测试、循环播放、点击屏幕释放、意图调色与缩放。
 - **生命周期**：由 `VFXStandaloneEmitter` 驱动，支持 `@tool` 编辑器预览与自动安全释放（`queue_free`）。
+
+### D21: 架构重构——效果系统 / EnemyAI / TimeController / 可序列化 RunState ✅
+- **CardSystem（卡牌效果系统）**：`_play_card()` 的大型 match 拆除。卡牌在 `content_catalog.gd` 声明 `effects` 效果列表（damage/heal/stagger/interrupt/scry/delay_impact/skip_next_strike/widen_window 等），`card_system.gd` 负责定义合成与升级补丁（"id+"），`battle_simulation.gd` 只做通用执行。新增卡牌零改动模拟器。
+- **EnemyAI（敌人规则层）**：反应式选招、特质（纸胎甲/惊灯/重尸/加速/骰运/记仇/拖拽）、Boss 阶段切换全部从模拟器拆出。
+- **TimeController（autoload GameTime）**：hit-stop、慢动作、测试加速、卡牌悬停减速统一 claim/release，不再互相打架。
+- **RunState**：局内状态（deck/hp/gold/relics/flags/map/seed/difficulty）完全可序列化，`SaveManager` 落盘 user://；Restart 语义改为"恢复本战开局血量"，消除恢复满血风险。
+- **RunFlow 瘦身**：状态机+编排 ~560 行；界面拆至 `screens/`（menu/map/reward/rest/event/shop/over/settings/pick_overlay），UI 构件统一在 `ui_kit.gd`。
+
+### D22: 肉鸽战略层建立 ✅
+- **随机地图**：`map_generator.gd` 行式分支地图（10 行+Boss），节点类型 battle/elite/event/rest/shop/treasure，MapScreen 路线选择；精英上探血量与伤害。
+- **经济与商店**：纸钱（战斗/事件/宝藏产出），鬼市买牌/遗物/删牌（焚符）/回血。
+- **遗物 10 件**：开局还愿/上限/完美加成/首牌免费/凝滞增幅/战后回复/躁动阈值/失误豁免/金币/还愿上限。
+- **删牌与升级**：歇脚可升级一张牌；事件与鬼市可删牌。升级卡战斗内即时生效（CardSystem 合成）。
+- **局外体系**：难度阶梯 0-3（通关解锁下一档，敌人血伤与收益修正）；Seed 输入（地图与战斗种子确定）；继续游戏（Run 自动存档）；存档管理（设置内删除）。
+
+### D23: 敌人专属机制与 Boss 阶段 ✅
+- 敌人不再只是"红蓝绿快"换皮：**纸扎学徒**纸胎甲（完美前符牌 -5 伤）、**剃头匠**剃刀圆舞越打越快、**赌鬼**骰运（开招掷骰定伤害/窗口，囤点会被出千）、**井中姐弟**双鞭分段伤害+拖拽偷牌、**更练尸**重尸（未防范挨打 +4）、**义庄看守**记仇（失误后下刀 +6）、**灯笼小鬼**惊灯（被完美后只会窜）。
+- **守灯人三阶段**：66%/33% 血量切换招式池（大典三斩→撕灯：纸灰骤雨/灯焰领域→收灯：掐芯灭灯/极·长夜收灯），阶段切换播报+僵直惩罚窗口。
+- 多段招支持独立分段伤害（strike_damage）。
+
+### D24: 剧情与玩法咬合 ✅
+- 事件不再只是"看文字→加血/拿牌"：纸人百号（开脸→破学徒纸胎甲）、赌债（押局→骰运被做局）、井中回声（听井→姐弟窗口放宽）、哭丧调（跟唱→Boss 一阶段慢半拍）、迷路游魂（超度→删牌 / 随行→遗物）、鬼市摊、破庙歇脚。
+- 旗标写入 RunState.flags，经 run_mods 进入战斗规则层。
+
+### D25: 教学 / 输入 / 无障碍 ✅
+- **渐进教学**：tutorial.gd 事件驱动五步（防范→出牌→召符→鬼手→乘势），完成后写入局外进度；暂停菜单内置更夫手册。
+- **InputMap**：defend/card_1-4/summon/pause/restart 注册为动作，键盘可重映射（设置界面），手柄默认映射（Space=A、5=Y、Esc=Start 等）；main.gd 硬编码 keycode 全部移除。
+- **无障碍**：震屏强度、闪光减弱、文字缩放、色觉辅助（红/绿/蓝盲线性变换）、反应窗口辅助（判定窗口放宽 25%/50%，经 run_mods 进入规则层）。设置持久化 user://settings.json。
+
+### D26: 真人验证数据闭环 ✅
+- Telemetry（autoload）：每局记录节点轨迹、逐招防范三态（误判率）、出牌/召符资源占比、三选一选择率、首死位置、退出节点、构筑胜率。落盘 user://telemetry/，聚合 summary.json。自动 Playtest 只证明"能运行"，这份数据回答"人玩得如何"。
+
+### D27: Bug 与一致性修复 ✅
+- Run 内 Restart：恢复本战开局血量（initial_hp 显式语义），不再有恢复满血风险。
+- 长明：真实"灯油上限 +6"（战斗内生效，胜利后固化到 Run），字段名与效果一致。
+- 问路：实装真正的"牌堆顶看三选一"（scry_offer/scry_pick），与 CONTENT_DESIGN 规格一致。
+- content_hash 覆盖全部玩法字段（卡牌效果/招式机制字段/敌人特质与阶段/遗物/难度）。
+- 新增 `tools/validate_roguelike.gd`（24 项：地图连通性/Seed 确定性/存档往返/效果系统/特质/Boss 阶段/问路/遥测）。

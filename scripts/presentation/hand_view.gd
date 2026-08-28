@@ -4,6 +4,7 @@ extends Control
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
+const CardSystemScript := preload("res://scripts/battle/card_system.gd")
 
 var sim: BattleSimulationScript
 var command: Callable
@@ -20,6 +21,7 @@ var defense_button: Button
 var summon_button: Button
 var _card_textures: Dictionary = {}
 var _hovered_slot: int = -1
+var scry_panel: Panel = null
 
 
 func setup(s: BattleSimulationScript, command_cb: Callable) -> void:
@@ -35,7 +37,9 @@ func setup(s: BattleSimulationScript, command_cb: Callable) -> void:
 func _load_card_textures() -> void:
 	for id in BattleSimulationScript.CARD_DATA:
 		if PresentationCatalog.CARD_PRESENTATION.has(id):
-			_card_textures[id] = load(PresentationCatalog.CARD_PRESENTATION[id].icon)
+			var icon_path: String = PresentationCatalog.CARD_PRESENTATION[id].icon
+			if ResourceLoader.exists(icon_path):
+				_card_textures[id] = load(icon_path)
 		else:
 			var default_icon := "res://assets/game/cards/card_%s.png" % id
 			if ResourceLoader.exists(default_icon):
@@ -162,9 +166,8 @@ func _on_card_hovered(slot: int) -> void:
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(button, "scale", Vector2(1.28, 1.28), 0.16)
 		tw.tween_property(button, "position:y", -24.0, 0.16)
-		# 谋定后动 (Tactical Focus): 战术时空减速至 0.65x，从容阅读卡牌且防弹反作弊
-		if Engine.time_scale >= 0.95:
-			Engine.time_scale = 0.65
+		# 谋定后动 (Tactical Focus): 战术时空减速，经 TimeController 统一管理
+		GameTime.claim("card_hover", 0.65)
 
 
 func _on_card_unhovered(slot: int) -> void:
@@ -176,14 +179,12 @@ func _on_card_unhovered(slot: int) -> void:
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(button, "scale", Vector2.ONE, 0.18)
 		tw.tween_property(button, "position:y", 12.0, 0.18)
-		# 恢复正常时间流速 (0.65 -> 1.0)
-		if _hovered_slot == -1 and absf(Engine.time_scale - 0.65) < 0.05:
-			Engine.time_scale = 1.0
+		if _hovered_slot == -1:
+			GameTime.release("card_hover")
 
 
 func _on_slot_pressed(slot: int) -> void:
-	if absf(Engine.time_scale - 0.65) < 0.05:
-		Engine.time_scale = 1.0
+	GameTime.release("card_hover")
 	if slot >= 0 and slot < sim.hand.size():
 		command.call({"type": "play_card", "id": sim.hand[slot]})
 
@@ -200,16 +201,16 @@ func rebuild_hand() -> void:
 		var class_tag: Label = slot_classes[i]
 		if i < sim.hand.size():
 			var id: String = sim.hand[i]
-			var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
-			var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[id]
-			icon.texture = _card_textures.get(id)
-			cost_lbl.text = str(data.cost)
-			title.text = "%s  [%d]" % [pres.title, i + 1]
-			hint.text = "%s·%d点｜%s" % [data["class"], data.cost, _card_short(id)]
-			class_tag.text = String(data["class"])
-			class_tag.add_theme_color_override("font_color", class_colors[data["class"]])
-			button.tooltip_text = _card_tip(id)
-			var frame_path: String = PresentationCatalog.CARD_FRAMES.get(data["class"], "")
+			var display: String = CardSystemScript.display_id(id)
+			var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[display]
+			icon.texture = _card_textures.get(display)
+			cost_lbl.text = str(CardSystemScript.cost_of(id))
+			title.text = "%s%s  [%d]" % [pres.title, "+" if id.ends_with("+") else "", i + 1]
+			hint.text = "%s·%d点｜%s" % [CardSystemScript.class_of(id), CardSystemScript.cost_of(id), CardSystemScript.describe(id)]
+			class_tag.text = CardSystemScript.class_of(id)
+			class_tag.add_theme_color_override("font_color", class_colors[CardSystemScript.class_of(id)])
+			button.tooltip_text = CardSystemScript.describe(id)
+			var frame_path: String = PresentationCatalog.CARD_FRAMES.get(CardSystemScript.class_of(id), "")
 			if frame_path != "" and ResourceLoader.exists(frame_path):
 				frame.texture = load(frame_path)
 			else:
@@ -255,19 +256,20 @@ func refresh_slots() -> void:
 		var button: Button = card_buttons[i]
 		if i < sim.hand.size():
 			var card_id: String = sim.hand[i]
-			var cost := int(BattleSimulationScript.CARD_DATA[card_id].cost)
-			var can_afford := sim.points >= cost and not ended
+			var cost := CardSystemScript.cost_of(card_id)
+			var display: String = CardSystemScript.display_id(card_id)
+			var can_afford := sim.points >= cost and not ended and sim.scry_options.is_empty()
 			button.disabled = not can_afford
 			if not can_afford:
 				button.modulate = Color(0.55, 0.58, 0.65, 0.65)
-			elif card_id == "shatter" and stagger_active:
+			elif display == "shatter" and stagger_active:
 				button.modulate = Color("ffe08a") # Stagger bonus glow highlight
 			else:
 				button.modulate = Color.WHITE
 		else:
 			button.disabled = true
 			button.modulate = Color.WHITE
-	summon_button.disabled = sim.points < BattleSimulationScript.SUMMON_COST or sim.hand.size() >= BattleSimulationScript.HAND_SIZE or ended
+	summon_button.disabled = sim.points < BattleSimulationScript.SUMMON_COST or sim.hand.size() >= BattleSimulationScript.HAND_SIZE or ended or not sim.scry_options.is_empty()
 	summon_button.modulate = Color.WHITE if not summon_button.disabled else Color(0.55, 0.58, 0.65, 0.65)
 	refresh_defense()
 
@@ -295,6 +297,42 @@ func refresh_defense() -> void:
 func _card_short(id: String) -> String:
 	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯", "duannian": "断念", "dengxin": "挑芯", "zhuangzhong": "鸣钟", "anhun": "安魂"}
 	return shorts.get(id, "符牌")
+
+
+## 问路（scry）：牌堆顶三选一。
+func show_scry(options: Array) -> void:
+	close_scry()
+	scry_panel = Panel.new()
+	scry_panel.position = Vector2(280, -180)
+	scry_panel.size = Vector2(720, 150)
+	scry_panel.add_theme_stylebox_override("panel", _style_box(Color(0.03, 0.03, 0.05, 0.97), Color("82b888"), 14, 3))
+	add_child(scry_panel)
+	var title := _label(Vector2(16, 8), Vector2(688, 26), 16, Color("aad18f"), true)
+	title.text = "问路——牌堆顶三张，选一张入手"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	scry_panel.add_child(title)
+	for i in options.size():
+		var id := String(options[i])
+		var display: String = CardSystemScript.display_id(id)
+		var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[display]
+		var btn := Button.new()
+		btn.position = Vector2(24 + i * 232, 40)
+		btn.size = Vector2(216, 96)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.text = "%s%s\n%s·%d点\n%s" % [pres.title, "+" if id.ends_with("+") else "", CardSystemScript.class_of(id), CardSystemScript.cost_of(id), CardSystemScript.describe(id)]
+		btn.add_theme_font_size_override("font_size", 14)
+		btn.add_theme_stylebox_override("normal", _style_box(Color("151821"), pres.color.darkened(0.2), 10, 2))
+		btn.add_theme_stylebox_override("hover", _style_box(Color("222631"), pres.color, 10, 3))
+		var idx := i
+		btn.pressed.connect(func():
+			command.call({"type": "scry_pick", "index": idx}))
+		scry_panel.add_child(btn)
+
+
+func close_scry() -> void:
+	if scry_panel:
+		scry_panel.queue_free()
+		scry_panel = null
 
 
 func _card_tip(id: String) -> String:

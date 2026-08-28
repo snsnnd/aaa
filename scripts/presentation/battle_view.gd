@@ -95,11 +95,11 @@ func view_time() -> float:
 
 
 func intent_color() -> Color:
-	return PresentationCatalog.MOVE_PRESENTATION[String(sim.current_intent.id)].color
+	return GameSettings.adjust_color(PresentationCatalog.MOVE_PRESENTATION[String(sim.current_intent.id)].color)
 
 
 func add_trauma(amount: float) -> void:
-	fx.trauma = minf(1.0, fx.trauma + amount)
+	fx.trauma = minf(1.0, fx.trauma + amount * GameSettings.shake_scale)
 
 
 func pulse_glow(value: float) -> void:
@@ -130,9 +130,8 @@ func hit_stop(duration: float, time_scale: float) -> void:
 	if hitstop_running:
 		return
 	hitstop_running = true
-	Engine.time_scale = time_scale
+	GameTime.hitstop(duration, time_scale)
 	await get_tree().create_timer(duration, true, false, true).timeout
-	Engine.time_scale = 1.0
 	hitstop_running = false
 
 
@@ -265,7 +264,8 @@ func present_death(victory: bool) -> void:
 
 
 func restart_fx() -> void:
-	Engine.time_scale = 1.0
+	GameTime.release("hitstop")
+	GameTime.release("slowmo")
 	fx.reset()
 	player_anim.player_sprite.modulate = Color.WHITE
 	enemy_anim.enemy_aura.modulate.a = 0.5

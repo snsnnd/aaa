@@ -2,9 +2,12 @@ class_name BattleSimulation
 extends RefCounted
 
 const ContentCatalog := preload("res://scripts/battle/content_catalog.gd")
+const CardSystemScript := preload("res://scripts/battle/card_system.gd")
+const EnemyAIScript := preload("res://scripts/battle/enemy_ai.gd")
 
 ## 纯规则层：不含 Node、输入、音频、动画或任何 Godot 场景对象。
 ## 输入只能是 submit() 的命令，输出只能是事件数组，状态全部可读、可快照。
+## 卡牌执行走 CardSystem 效果列表；敌人选招/特质/Boss 阶段走 EnemyAI。
 
 enum BattleState { WINDUP, RESOLVING, VICTORY, DEFEAT }
 enum DefenseGrade { NONE, SUCCESS, PERFECT }
@@ -30,6 +33,7 @@ const ENEMIES := ContentCatalog.ENEMIES
 var state: BattleState = BattleState.WINDUP
 var initial_hp := PLAYER_MAX_HP
 var player_hp := PLAYER_MAX_HP
+var player_max_hp := PLAYER_MAX_HP
 var enemy_hp := 46
 var points := 0
 var attack_index := 0
@@ -67,32 +71,39 @@ var golden_body := 0
 var stats := {}
 var defense_log: Array[Dictionary] = []
 var current_intent: Dictionary = {}
+var ai: EnemyAIScript
+## 局外修饰：遗物 mods + 难度修饰 + 反应辅助。由 RunFlow/apply_run_config 写入。
+var run_mods: Dictionary = {}
+## 剧情旗标（RunState.flags 的只读投影）。
+var story_flags: Dictionary = {}
+## 问路（scry）待选状态：非空时仅接受 scry_pick 命令。
+var scry_options: Array[String] = []
+var _begin_events: Array = []
+var _skip_next_strike := false
+var _cards_played := 0
+var _first_miss_used := false
+var _next_window_bonus := 0.0
 
 
+func _init() -> void:
+	ai = EnemyAIScript.new()
+	restart()
+
+
+## 玩法内容指纹：仅含规则字段；表现改动不影响此值。
 func content_hash() -> int:
-	## 玩法内容指纹：仅含规则字段；表现改动不影响此值。
 	var parts: Array[String] = []
 	parts.append("pw=%.3f/gr=%.3f/mc=%d/sc=%d" % [PERFECT_WINDOW, SUCCESS_GRACE, MAX_POINTS, SUMMON_COST])
 	parts.append("hp=%d/deck=%s" % [PLAYER_MAX_HP, ",".join(STARTING_DECK)])
 	for id in CARD_DATA:
-		var c: Dictionary = CARD_DATA[id]
-		parts.append("c:%s=%d/%s/d=%s/h=%s/b=%s/st=%s/cl=%s/m=%s/f=%s" % [
-			id, int(c.cost), String(c["class"]),
-			str(c.get("damage", 0)), str(c.get("heal", 0)), str(c.get("bonus", 0)),
-			str(c.get("stagger", 0.0)), str(bool(c.get("cleanse", false))),
-			str(c.get("mirror", 0)), str(c.get("fear_mul", 1.0))
-		])
+		parts.append("c:%s=%s" % [id, var_to_str(CARD_DATA[id])])
 	for mid in MOVES:
-		var m: Dictionary = MOVES[mid]
-		parts.append("m:%s=%s/dur=%.2f/dmg=%d/unb=%s/win=%.2f" % [
-			mid, str(m.get("strikes", [])), float(m.duration), int(m.damage),
-			str(bool(m.get("unblockable", false))), float(m.get("window", 0.2))
-		])
+		parts.append("m:%s=%s" % [mid, var_to_str(MOVES[mid])])
 	for eid in ENEMIES:
-		var e: Dictionary = ENEMIES[eid]
-		parts.append("e:%s=%d/%s/mul=%.2f" % [eid, int(e.hp), str(e.moves), float(e.get("dmg_mul", 1.0))])
+		parts.append("e:%s=%s" % [eid, var_to_str(ENEMIES[eid])])
+	parts.append("relics=%s" % var_to_str(ContentCatalog.RELICS))
+	parts.append("diffs=%s" % var_to_str(ContentCatalog.DIFFICULTIES))
 	return hash("\n".join(parts))
-var _begin_events: Array = []
 
 
 func _reset_stats() -> void:
@@ -100,18 +111,34 @@ func _reset_stats() -> void:
 		"defends": 0, "interrupts": 0, "summons": 0, "points_spent": 0,
 		"points_spent_summon": 0, "unblocked_hits": 0, "moves_faced": 0,
 		"zhan_played": 0, "yu_played": 0, "you_played": 0,
+		"cards_played": 0, "damage_dealt": 0, "damage_taken": 0,
+		"max_hp_gained": 0, "cards_pulled": 0, "phases_seen": 0,
 	}
 
 
-func _init() -> void:
-	restart()
+func _mod(key: String, fallback: Variant) -> Variant:
+	return run_mods.get(key, fallback)
 
 
-func restart() -> void:
+func _max_points() -> int:
+	return mini(99, MAX_POINTS + int(_mod("max_points_bonus", 0)))
+
+
+func _rage_threshold() -> int:
+	return int(_mod("rage_threshold", 7))
+
+
+func _reaction_assist() -> float:
+	return maxf(0.5, float(_mod("reaction_assist", 1.0)))
+
+
+func restart(hp: int = -1) -> void:
+	## 显式语义：hp < 0 → 恢复到 initial_hp（本战开局血量，由 RunFlow 写入），
+	## 因此 Run 内重开只会回到本战起点，不存在恢复满血的风险。
 	battle_generation += 1
-	player_hp = initial_hp
-	enemy_hp = int(ENEMIES[enemy_id].hp)
-	points = 0
+	player_max_hp = PLAYER_MAX_HP + int(_mod("max_hp_bonus", 0))
+	player_hp = initial_hp if hp < 0 else mini(hp, player_max_hp)
+	points = mini(int(_mod("start_points", 0)), _max_points())
 	attack_index = 0
 	defense_cooldown = 0.0
 	stagger_remaining = 0.0
@@ -127,14 +154,29 @@ func restart() -> void:
 	mirror_charges = 0
 	podan_mul = 1.0
 	golden_body = 0
+	_cards_played = 0
+	_first_miss_used = false
+	_next_window_bonus = 0.0
+	scry_options.clear()
 	_reset_stats()
 	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
 	battle_seed = 20260828 + battle_generation
 	rng_state = battle_seed
+	ai.setup(enemy_id)
+	ai.rng_state = battle_seed ^ 0x5bf03635
+	enemy_max_hp = int(round(float(ENEMIES[enemy_id].hp) * float(_mod("enemy_hp_mul", 1.0))))
+	enemy_hp = enemy_max_hp
 	_setup_deck()
 	_begin_attack()
+
+
+## 战斗开场事件（特质播报/骰运等）：由表现层在开局后主动取走。
+func drain_begin_events() -> Array:
+	var out := _begin_events.duplicate()
+	_begin_events.clear()
+	return out
 
 
 func _next_rand() -> float:
@@ -176,7 +218,14 @@ func _draw_to_hand() -> bool:
 	return changed
 
 
-## 命令入口：{type:"defend"} 或 {type:"play_card", id:"attack"}。
+func _refill_draw_pile() -> void:
+	if draw_pile.is_empty() and not discard_pile.is_empty():
+		draw_pile = Array(discard_pile.duplicate(), TYPE_STRING, "", null)
+		discard_pile.clear()
+		_shuffle(draw_pile)
+
+
+## 命令入口：{type:"defend"} / {type:"play_card", id:...} / {type:"summon"} / {type:"scry_pick", index:n}。
 ## 返回本命令立刻产生的事件；延迟事件随 step() 返回。
 func submit(command: Dictionary) -> Array:
 	match String(command.get("type", "")):
@@ -186,7 +235,26 @@ func submit(command: Dictionary) -> Array:
 			return _play_card(String(command.get("id", "")))
 		"summon":
 			return _summon_card()
+		"scry_pick":
+			return _scry_pick(int(command.get("index", 0)))
 	return []
+
+
+func _scry_pick(index: int) -> Array:
+	var events: Array = []
+	if scry_options.is_empty():
+		return events
+	index = clampi(index, 0, scry_options.size() - 1)
+	var picked: String = scry_options[index]
+	scry_options.remove_at(index)
+	for remaining in scry_options:
+		draw_pile.append(remaining)
+	hand.append(picked)
+	scry_options.clear()
+	events.append({"type": "card_played", "id": "wenlu", "draw": 1})
+	events.append({"type": "hand_changed"})
+	events.append({"type": "scry_done", "picked": picked})
+	return events
 
 
 func _summon_card() -> Array:
@@ -252,7 +320,12 @@ func _step_windup(delta: float, events: Array) -> void:
 	_collect_fake_events(events)
 	var strikes: Array = current_intent.get("strikes", [])
 	while state == BattleState.WINDUP and strike_index < strikes.size() and attack_elapsed >= float(strikes[strike_index]):
-		_resolve_impact(events)
+		if _skip_next_strike:
+			_skip_next_strike = false
+			queued_defense = DefenseGrade.NONE
+			events.append({"type": "strike_skipped", "index": strike_index})
+		else:
+			_resolve_impact(events)
 		strike_index += 1
 	if state == BattleState.WINDUP and not strikes.is_empty() and strike_index >= strikes.size():
 		_finish_action(events)
@@ -263,8 +336,8 @@ func _step_windup(delta: float, events: Array) -> void:
 
 
 func _collect_cue_events(events: Array) -> void:
-	if current_intent.id == "blue":
-		var strikes: Array = current_intent.strikes
+	var strikes: Array = current_intent.get("strikes", [])
+	if not strikes.is_empty():
 		if strike_index < strikes.size() and attack_elapsed >= float(strikes[strike_index]) - 0.13 and blue_cue_index != strike_index:
 			blue_cue_index = strike_index
 			events.append({"type": "commit_cue", "intent": current_intent.id, "enemy": enemy_id})
@@ -302,10 +375,11 @@ func _attempt_defense() -> Array:
 			_log_defense("未处理鬼手")
 			events.append({"type": "defense_miss", "unblockable": true, "reason": "points"})
 		return events
+	var assist := _reaction_assist()
 	var time_to_impact := _current_impact_time() - attack_elapsed
-	var success_window: float = current_intent.window
+	var success_window: float = float(current_intent.window) * assist
 	if time_to_impact >= 0.0 and time_to_impact <= success_window:
-		queued_defense = DefenseGrade.PERFECT if time_to_impact <= PERFECT_WINDOW else DefenseGrade.SUCCESS
+		queued_defense = DefenseGrade.PERFECT if time_to_impact <= PERFECT_WINDOW * assist else DefenseGrade.SUCCESS
 		if force_perfect_next:
 			queued_defense = DefenseGrade.PERFECT
 			force_perfect_next = false
@@ -320,43 +394,19 @@ func _attempt_defense() -> Array:
 	return events
 
 
-func _pick_reactive(enemy: Dictionary) -> String:
-	var pool: Array = enemy.moves
-	if pool.size() == 1:
-		return String(pool[0])
-	var weights: Array[float] = []
-	var total := 0.0
-	for mid in pool:
-		var w := _move_weight(String(mid))
-		weights.append(w)
-		total += w
-	var roll := _next_rand() * total
-	for i in pool.size():
-		roll -= weights[i]
-		if roll <= 0.0:
-			return String(pool[i])
-	return String(pool[pool.size() - 1])
-
-
+## 兼容旧接口：反应式权重查询（冒烟测试使用）。
 func _move_weight(mid: String) -> float:
-	var move: Dictionary = MOVES[mid]
-	var w := 1.0
-	if String(mid) == last_move_id:
-		w = 0.0
-	if String(mid) == second_last_move_id and int(ENEMIES[enemy_id].moves.size()) == 2:
-		w *= 0.15
-	if bool(move.get("unblockable", false)):
-		if points >= 7 or rage >= 2:
-			w += 0.9
-		if enemy_hp >= int(ENEMIES[enemy_id].hp) * 0.6 and enemy_id != "lantern_keeper":
-			w *= 0.5
-	if int(move.damage) >= 12 and player_hp <= 24:
-		w += 0.6
-	if float(move.window) <= 0.22 and was_last_perfect:
-		w += 0.5
-	if enemy_hp < int(ENEMIES[enemy_id].hp) / 2 and int(move.damage) >= 12:
-		w += 0.4
-	return w
+	_sync_ai()
+	return ai.move_weight(mid)
+
+
+func _sync_ai() -> void:
+	ai.enemy_hp = enemy_hp
+	ai.player_points = points
+	ai.player_hp = player_hp
+	ai.player_hp_max = player_max_hp
+	ai.was_last_perfect = was_last_perfect
+	ai.rage = rage
 
 
 func _log_defense(result: String, tt := 0.0) -> void:
@@ -366,10 +416,9 @@ func _log_defense(result: String, tt := 0.0) -> void:
 
 
 func _current_impact_time() -> float:
-	if current_intent.id == "blue":
-		var strikes: Array = current_intent.strikes
-		if strike_index < strikes.size():
-			return float(strikes[strike_index])
+	var strikes: Array = current_intent.get("strikes", [])
+	if not strikes.is_empty() and strike_index < strikes.size():
+		return float(strikes[strike_index])
 	return float(current_intent.duration)
 
 
@@ -382,169 +431,248 @@ func _resolve_impact(events: Array) -> void:
 		DefenseGrade.SUCCESS:
 			if mirror_charges > 0:
 				mirror_charges -= 1
-				enemy_hp -= 3
+				_damage_enemy(3, events, false)
 				events.append({"type": "mirror_counter"})
-			points = mini(MAX_POINTS, points + 1)
+			points = mini(_max_points(), points + 1)
 			perfect_charge = false
 			events.append({"type": "impact", "grade": grade, "points": 1})
 			events.append({"type": "points_changed"})
 		DefenseGrade.PERFECT:
-			points = mini(MAX_POINTS, points + 1)
+			points = mini(_max_points(), points + int(_mod("perfect_extra_point", 0)) + 1)
 			perfect_charge = true
 			perfects += 1
 			rage = mini(6, rage + 1)
 			events.append({"type": "impact", "grade": grade, "points": 1})
 			events.append({"type": "points_changed"})
-			if current_intent.id == "blue" and strike_index < int(current_intent.strikes.size()) - 1:
+			if current_intent.id == "blue" and strike_index < int(current_intent.get("strikes", []).size()) - 1:
 				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + PARRY_STAGGER)
 			events.append({"type": "enemy_staggered"})
+			_break_armor(events)
 		_:
 			perfect_charge = false
-			var damage := int(current_intent.damage)
-			damage = int(round(damage * float(ENEMIES[enemy_id].get("dmg_mul", 1.0))))
-			var enraged := enemy_hp < int(ENEMIES[enemy_id].hp) / 2
-			if enraged:
-				damage = int(round(damage * 1.15))
-			if podan_mul < 1.0:
-				damage = int(round(damage * podan_mul))
-				podan_mul = 1.0
-			if golden_body > 0:
-				damage = 5
-				golden_body -= 1
+			var damage := _incoming_damage()
 			player_hp = maxi(0, player_hp - damage)
 			stats.unblocked_hits = int(stats.get("unblocked_hits", 0)) + 1
+			stats.damage_taken = int(stats.get("damage_taken", 0)) + damage
 			_log_defense("未防范 " + current_intent.get("title", ""))
-			events.append({"type": "impact", "grade": grade, "damage": damage, "enraged": enraged})
+			events.append({"type": "impact", "grade": grade, "damage": damage, "enraged": enemy_hp < enemy_max_hp / 2})
+			_pull_card(events)
 			if player_hp <= 0:
 				_end_battle(events)
 
 
+func _incoming_damage() -> int:
+	var strikes: Array = current_intent.get("strikes", [])
+	var damage: int = int(current_intent.damage)
+	if not strikes.is_empty() and strike_index < int(current_intent.get("strike_damage", []).size()):
+		damage = int(current_intent["strike_damage"][strike_index])
+	damage = int(round(float(damage) * float(ENEMIES[enemy_id].get("dmg_mul", 1.0)) * float(_mod("enemy_dmg_mul", 1.0))))
+	damage += int(current_intent.get("vengeance_bonus", 0))
+	if String(ENEMIES[enemy_id].get("trait", "")) == "heavy":
+		damage += 4
+	if enemy_hp < enemy_max_hp / 2:
+		damage = int(round(damage * 1.15))
+	if podan_mul < 1.0:
+		damage = int(round(damage * podan_mul))
+		podan_mul = 1.0
+	if golden_body > 0:
+		damage = 5
+		golden_body -= 1
+	return damage
+
+
+## 未防范命中且招式带 pull：拖走玩家一张手牌（井中姐弟 / 守灯人三阶段）。
+func _pull_card(events: Array) -> void:
+	if not bool(current_intent.get("pull", false)) or hand.is_empty():
+		return
+	var victim: String = hand[int(_next_rand() * float(hand.size()))]
+	hand.erase(victim)
+	discard_pile.append(victim)
+	stats.cards_pulled = int(stats.get("cards_pulled", 0)) + 1
+	events.append({"type": "card_pulled", "id": victim})
+	events.append({"type": "hand_changed"})
+
+
+func _break_armor(events: Array) -> void:
+	if String(ENEMIES[enemy_id].get("trait", "")) == "paper_armor" and not ai.armor_broken:
+		ai.armor_broken = true
+		events.append({"type": "armor_broken"})
+
+
+func _damage_enemy(amount: int, events: Array, from_card: bool) -> void:
+	var dealt := amount
+	if from_card:
+		dealt = maxi(1, amount + ai.card_damage_modifier())
+	enemy_hp -= dealt
+	stats.damage_dealt = int(stats.get("damage_dealt", 0)) + dealt
+	if enemy_hp <= 0:
+		_end_battle(events)
+		return
+	# Boss 阶段切换（血量阈值）
+	_sync_ai()
+	for ev: Dictionary in ai.check_phase([]):
+		stagger_remaining = maxf(stagger_remaining, float(ev.get("stagger", 1.0)))
+		stats.phases_seen = int(stats.get("phases_seen", 0)) + 1
+		events.append(ev)
+
+
 func _play_card(id: String) -> Array:
 	var events: Array = []
-	var data: Dictionary = CARD_DATA.get(id, {})
-	if data.is_empty():
-		return events
 	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
 		events.append({"type": "card_rejected", "id": id, "reason": "ended"})
+		return events
+	if not scry_options.is_empty():
+		events.append({"type": "card_rejected", "id": id, "reason": "scrying"})
 		return events
 	if not hand.has(id):
 		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
 		return events
-	var cost := int(data.cost)
+	var def: Dictionary = CardSystemScript.effective_def(id)
+	if def.is_empty():
+		return events
+	var cost := int(def.cost)
+	if _cards_played == 0 and bool(_mod("first_card_free", false)):
+		cost = 0
 	if points < cost:
 		events.append({"type": "card_rejected", "id": id, "reason": "points"})
 		return events
 	points -= cost
 	stats.points_spent = int(stats.get("points_spent", 0)) + cost
-	match String(CARD_DATA[id]["class"]):
+	stats.cards_played = _cards_played + 1
+	_cards_played += 1
+	match String(def["class"]):
 		"斩":
 			stats.zhan_played = int(stats.get("zhan_played", 0)) + 1
 		"御":
 			stats.yu_played = int(stats.get("yu_played", 0)) + 1
 		"佑":
 			stats.you_played = int(stats.get("you_played", 0)) + 1
-	match id:
-		"attack", "zhuying", "liebo", "xuezhang", "baiguyin", "shoulian", "yuangui", "tianping":
-			var dmg: int = int(data.get("damage", 5))
-			if id == "xuezhang" and player_hp < PLAYER_MAX_HP:
-				dmg += 6
-			elif id == "shoulian" and enemy_hp < 20:
-				dmg += 8
-			elif id == "baiguyin":
-				force_perfect_next = true
-			enemy_hp -= dmg
+	for eff: Dictionary in CardSystemScript.effects_of(id):
+		_apply_effect(eff, id, events)
+	hand.erase(id)
+	discard_pile.append(id)
+	if enemy_hp <= 0 and state not in [BattleState.VICTORY, BattleState.DEFEAT]:
+		_end_battle(events)
+	return events
+
+
+func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:
+	var n := int(eff.get("amount", 0))
+	match String(eff.get("type", "")):
+		"damage":
+			var dmg := n
+			match String(eff.get("bonus_cond", "")):
+				"player_wounded":
+					if player_hp < player_max_hp:
+						dmg += int(eff.get("bonus", 0))
+				"enemy_low":
+					if enemy_hp < 20:
+						dmg += int(eff.get("bonus", 0))
+			_damage_enemy(dmg, events, true)
 			events.append({"type": "card_played", "id": id, "damage": dmg})
-		"shuangdeng":
-			var dmg: int = int(data.damage)
-			enemy_hp -= dmg
-			var healed := mini(int(data.get("heal", 3)), PLAYER_MAX_HP - player_hp)
-			player_hp += healed
-			events.append({"type": "card_played", "id": id, "damage": dmg, "healed": healed})
-		"shatter":
+		"charged_bonus":
 			var in_stagger_window := state == BattleState.RESOLVING or stagger_remaining > 0.0
-			var charged := perfect_charge and in_stagger_window
-			var total := int(data.damage) + (int(data.bonus) if charged else 0)
+			if perfect_charge and in_stagger_window:
+				_damage_enemy(n, events, true)
+				events.append({"type": "charged_bonus", "id": id, "damage": n})
 			perfect_charge = false
-			enemy_hp -= total
-			events.append({"type": "card_played", "id": id, "damage": total, "charged": charged})
-		"guard", "difan", "fuhunsuo", "zhuangzhong":
-			var dmg: int = int(data.get("damage", 0))
-			if dmg > 0:
-				enemy_hp -= dmg
-			var st: float = float(data.get("stagger", 0.0))
-			if id == "guard" and state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
+		"heal":
+			var healed := mini(n, player_max_hp - player_hp)
+			player_hp += healed
+			events.append({"type": "card_played", "id": id, "healed": healed})
+		"max_hp":
+			player_max_hp += n
+			player_hp = mini(player_max_hp, player_hp + n)
+			stats.max_hp_gained = int(stats.get("max_hp_gained", 0)) + n
+			events.append({"type": "card_played", "id": id, "max_hp": n})
+		"damage_self":
+			player_hp = maxi(1, player_hp - n)
+			events.append({"type": "card_played", "id": id, "self_damage": n})
+		"stagger":
+			if state == BattleState.WINDUP and n > 0.0:
+				var amount := float(n) * float(_mod("stagger_mul", 1.0))
+				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + amount)
+				events.append({"type": "stagger", "duration": amount})
+		"grab_cancel":
+			if state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
 				_finish_action(events)
-				points = mini(MAX_POINTS, points + 1)
+				points = mini(_max_points(), points + 1)
 				events.append({"type": "grab_cancelled", "points": 1})
 				events.append({"type": "points_changed"})
-			elif state == BattleState.WINDUP and st > 0.0:
-				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + st)
-				events.append({"type": "stagger", "duration": st})
-			events.append({"type": "card_played", "id": id, "damage": dmg})
-		"jiedao":
+		"interrupt":
 			if state == BattleState.WINDUP and enemy_id != "lantern_keeper":
 				_finish_action(events)
+				stats.interrupts = int(stats.get("interrupts", 0)) + 1
 				events.append({"type": "action_interrupted"})
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"duanxiang":
+		"force_perfect":
+			force_perfect_next = true
+		"mirror":
+			mirror_charges = mini(3, mirror_charges + n)
+		"fear":
+			podan_mul = float(eff.get("mul", 1.0))
+		"golden":
+			golden_body += n
+		"cleanse":
+			if bool(current_intent.get("unblockable", false)) and state == BattleState.WINDUP:
+				current_intent.unblockable = false
+				events.append({"type": "cleansed"})
+		"suppress_fake":
 			current_intent.fake = -1.0
 			fake_released = true
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"tinggeng":
-			var enemy: Dictionary = ENEMIES[enemy_id]
-			var next_id: String = String(enemy.moves[(attack_index + 1) % enemy.moves.size()])
-			events.append({"type": "card_played", "id": id, "next_move": MOVES[next_id].title, "unblockable": bool(MOVES[next_id].get("unblockable", false))})
-		"jieshi":
-			force_perfect_next = true
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"tongjing":
-			mirror_charges = mini(3, mirror_charges + 1)
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"podan":
-			podan_mul = 0.6
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"jinshen":
-			golden_body += 1
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"duannian":
-			enemy_hp -= int(data.damage)
+		"delay_impact":
+			var t := float(n)
+			if current_intent.has("strikes"):
+				var arr: Array = []
+				for s in current_intent.strikes:
+					arr.append(float(s) + t)
+				current_intent.strikes = arr
+			current_intent.duration = float(current_intent.duration) + t
+			events.append({"type": "impact_delayed", "amount": t})
+		"widen_window":
+			current_intent.window = float(current_intent.window) + float(eff.get("amount", 0.0))
+		"widen_window_next":
+			_next_window_bonus += float(eff.get("amount", 0.0))
+		"skip_next_strike":
+			if current_intent.get("strikes", []).size() > strike_index:
+				_skip_next_strike = true
+		"draw":
+			for _i in n:
+				_refill_draw_pile()
+				if hand.size() < HAND_SIZE and not draw_pile.is_empty():
+					hand.append(draw_pile.pop_back())
+			events.append({"type": "hand_changed"})
+		"scry":
+			_refill_draw_pile()
+			var count := mini(n, draw_pile.size())
+			scry_options.clear()
+			for _i in count:
+				scry_options.append(draw_pile.pop_back())
+			if not scry_options.is_empty():
+				events.append({"type": "card_played", "id": id, "scry": scry_options.size()})
+				events.append({"type": "scry_offer", "options": scry_options.duplicate()})
+			else:
+				events.append({"type": "card_played", "id": id, "draw": 0})
+		"summon_draw":
+			for _i in n:
+				_refill_draw_pile()
+				if hand.size() < HAND_SIZE and not draw_pile.is_empty():
+					hand.append(draw_pile.pop_back())
+			events.append({"type": "hand_changed"})
+			events.append({"type": "card_played", "id": id, "summon": n})
+		"discard_random":
 			var others: Array[String] = hand.filter(func(cid: String): return cid != id)
-			if not others.is_empty():
+			if not others.is_empty() and not bool(eff.get("optional", false)) or (not others.is_empty() and bool(eff.get("optional", false)) and _next_rand() < 0.5):
 				var victim: String = others[int(_next_rand() * float(others.size()))]
 				hand.erase(victim)
 				discard_pile.append(victim)
 				events.append({"type": "hand_changed"})
-			events.append({"type": "card_played", "id": id, "damage": int(data.damage), "discarded": true})
-		"anhun":
-			if bool(current_intent.get("unblockable", false)) and state == BattleState.WINDUP:
-				current_intent.unblockable = false
-				events.append({"type": "cleansed"})
-			events.append({"type": "card_played", "id": id, "damage": 0})
-		"shift", "dengxin", "tianyou", "jieshou":
-			var heal_amt: int = int(data.get("heal", 5))
-			var healed := mini(heal_amt, PLAYER_MAX_HP - player_hp)
-			player_hp += healed
-			events.append({"type": "card_played", "id": id, "healed": healed})
-		"wenlu":
-			if hand.size() < HAND_SIZE and not draw_pile.is_empty():
-				hand.append(draw_pile.pop_back())
-				events.append({"type": "hand_changed"})
-			events.append({"type": "card_played", "id": id, "draw": 1})
-		"zhima":
-			for _i in range(2):
-				if hand.size() < HAND_SIZE and not draw_pile.is_empty():
-					hand.append(draw_pile.pop_back())
-			events.append({"type": "hand_changed"})
-			events.append({"type": "card_played", "id": id, "summon": 2})
-		"changming":
-			var healed := mini(int(data.get("max_hp", 6)), PLAYER_MAX_HP - player_hp)
-			player_hp += healed
-			events.append({"type": "card_played", "id": id, "max_hp": 6})
-	hand.erase(id)
-	discard_pile.append(id)
-	if enemy_hp <= 0:
-		_end_battle(events)
-	return events
+		"points":
+			points = mini(_max_points(), points + n)
+			events.append({"type": "points_changed"})
+		"reveal_next":
+			var pool: Array = ai.moves_of()
+			var next_id: String = String(pool[(attack_index + 1) % pool.size()])
+			events.append({"type": "card_played", "id": id, "next_move": MOVES[next_id].title, "unblockable": bool(MOVES[next_id].get("unblockable", false))})
 
 
 func _finish_action(events: Array) -> void:
@@ -553,8 +681,10 @@ func _finish_action(events: Array) -> void:
 	recovery_remaining = recovery + (PARRY_STAGGER if perfect_charge else 0.0)
 	rage = maxi(0, rage - 1)
 	moves_completed += 1
+	if String(ENEMIES[enemy_id].get("trait", "")) == "tempo":
+		ai.tempo_count += 1
 	if hand.size() >= HAND_SIZE:
-		points = mini(MAX_POINTS, points + 1)
+		points = mini(_max_points(), points + 1)
 		events.append({"type": "points_changed"})
 	if hand.size() < HAND_SIZE and not (draw_pile.is_empty() and discard_pile.is_empty()):
 		if draw_pile.is_empty():
@@ -581,11 +711,11 @@ func _finish_action(events: Array) -> void:
 		else:
 			var victim := ""
 			for cid in hand:
-				if String(CARD_DATA[String(cid)]["class"]) != "斩":
+				if String(CardSystemScript.class_of(String(cid))) != "斩":
 					victim = String(cid)
 					break
 			if victim != "":
-				var zha: Array = pool.filter(func(cid: String): return String(CARD_DATA[String(cid)]["class"]) == "斩")
+				var zha: Array = pool.filter(func(cid: String): return String(CardSystemScript.class_of(String(cid))) == "斩")
 				var pick: String = zha[int(_next_rand() * float(zha.size()))] if not zha.is_empty() else pool[int(_next_rand() * float(pool.size()))]
 				if draw_pile.has(pick):
 					draw_pile.erase(pick)
@@ -618,16 +748,16 @@ func _begin_attack() -> void:
 	queued_defense = DefenseGrade.NONE
 	stagger_remaining = 0.0
 	perfect_charge = false
+	_skip_next_strike = false
+	_sync_ai()
 	var enemy: Dictionary = ENEMIES[enemy_id]
-	var move_id: String
-	if attack_index == 0 or not bool(enemy.get("reactive", false)):
-		move_id = String(enemy.moves[attack_index % enemy.moves.size()])
-	else:
-		move_id = _pick_reactive(enemy)
-	second_last_move_id = last_move_id
-	if points >= 7:
+	var move_id: String = ai.pick_move(attack_index)
+	ai.remember_move(move_id)
+	last_move_id = move_id
+	second_last_move_id = ai.second_last_move_id()
+	if points >= _rage_threshold():
 		rage = mini(6, rage + 1)
-	if enemy_hp < int(ENEMIES[enemy_id].hp) / 2 and not rage_half_applied:
+	if enemy_hp < enemy_max_hp / 2 and not rage_half_applied:
 		rage = mini(6, rage + 2)
 		rage_half_applied = true
 	var frenzied := rage >= 5
@@ -635,17 +765,38 @@ func _begin_attack() -> void:
 		rage = 2
 	if frenzied and enemy.moves.has("quick"):
 		move_id = "quick"
-	elif not bool(enemy.get("reactive", false)) or attack_index == 0:
-		move_id = String(enemy.moves[attack_index % enemy.moves.size()])
 	last_move_id = move_id
 	current_intent = MOVES[move_id].duplicate()
-	if move_id == "blue" and rage >= 3 and current_intent.strikes.size() >= 2:
-		var arr: Array = current_intent.strikes.duplicate()
-		arr.append(float(arr[arr.size() - 1]) + 0.64)
-		current_intent.strikes = arr
-		current_intent.duration = float(arr[arr.size() - 1]) + 0.3
+	ai.apply_tempo(current_intent)
+	current_intent.window = float(current_intent.window) + _next_window_bonus
+	_next_window_bonus = 0.0
+	var flags := story_flags
+	if enemy_id == "well_sisters" and bool(flags.get("well_blessing", false)):
+		current_intent.window = float(current_intent.window) * 1.1
+	if enemy_id == "lantern_keeper" and ai.current_phase() <= 0 and bool(flags.get("mourner_song", false)):
+		current_intent.window = float(current_intent.window) * 1.12
+	if bool(current_intent.get("dice", false)):
+		var roll: Dictionary = ai.roll_dice(bool(flags.get("dice_rigged", false)))
+		current_intent.damage = int(round(float(current_intent.damage) * float(roll.dmg_mul)))
+		if current_intent.has("strike_damage"):
+			var sd: Array = []
+			for d in current_intent.strike_damage:
+				sd.append(int(round(float(d) * float(roll.dmg_mul))))
+			current_intent.strike_damage = sd
+		current_intent.window = float(current_intent.window) * float(roll.window_mul)
+		_begin_events.append({"type": "dice_roll", "roll": roll.roll, "text": roll.text})
+	if String(enemy.get("trait", "")) == "vengeance" and ai.last_defense_missed:
+		current_intent.vengeance_bonus = 6
+		ai.last_defense_missed = false
+		_begin_events.append({"type": "vengeance_up"})
+	else:
+		current_intent.vengeance_bonus = 0
 	stats.moves_faced = int(stats.get("moves_faced", 0)) + 1
 	if frenzied:
 		_begin_events.append({"type": "frenzy"})
 	enemy_name = String(enemy.name)
-	enemy_max_hp = int(enemy.hp)
+	enemy_max_hp = int(round(float(enemy.hp) * float(_mod("enemy_hp_mul", 1.0))))
+	if attack_index == 0:
+		var intro := ai.trait_intro()
+		if intro != "":
+			_begin_events.append({"type": "trait_intro", "text": intro})

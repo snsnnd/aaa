@@ -1,26 +1,51 @@
 extends CanvasLayer
 
-## 菜单与结算浮层：歇脚菜单、设置项、胜负结算面板。
+## 暂停菜单与结算浮层：继续 / 重开 / 设置 / 离开夜巡，胜负结算面板。
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
+const SettingsScreenScript := preload("res://scripts/app/screens/settings_screen.gd")
 
 var sim: BattleSimulationScript
 var restart_cb: Callable
+var abandon_cb: Callable
 var root: Control
 var menu_root: Control
 var settle_root: Control
 var settle_title: Label
 var settle_sub: Label
 var menu_open := false
+var settings_screen: SettingsScreenScript
 
 
-func setup(s: BattleSimulationScript, restart_callback: Callable, shake_setter: Callable, hint_label: Label) -> void:
+func setup(s: BattleSimulationScript, restart_callback: Callable, abandon_callback: Callable, shake_setter: Callable, hint_label: Label) -> void:
 	sim = s
 	restart_cb = restart_callback
+	abandon_cb = abandon_callback
 	layer = 10
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_menu(shake_setter, hint_label)
 	_build_settlement()
+
+
+func _menu_button(text: String, y: float, cb: Callable) -> Button:
+	var btn := Button.new()
+	btn.position = Vector2(60, y)
+	btn.size = Vector2(280, 46)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.text = text
+	btn.add_theme_font_size_override("font_size", 19)
+	btn.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
+	btn.add_theme_stylebox_override("hover", _style_box(Color("493126"), Color("e0ad58"), 12, 3))
+	btn.pressed.connect(cb)
+	menu_panel().add_child(btn)
+	return btn
+
+
+func menu_panel() -> Panel:
+	for child in menu_root.get_children():
+		if child is Panel:
+			return child
+	return null
 
 
 func _build_menu(shake_setter: Callable, hint_label: Label) -> void:
@@ -35,8 +60,8 @@ func _build_menu(shake_setter: Callable, hint_label: Label) -> void:
 	menu_root.add_child(dim)
 
 	var panel := Panel.new()
-	panel.position = Vector2(440, 150)
-	panel.size = Vector2(400, 420)
+	panel.position = Vector2(440, 110)
+	panel.size = Vector2(400, 500)
 	panel.add_theme_stylebox_override("panel", _style_box(Color(0.03, 0.03, 0.045, 0.97), Color("8a6a3a"), 16, 2))
 	menu_root.add_child(panel)
 
@@ -45,62 +70,31 @@ func _build_menu(shake_setter: Callable, hint_label: Label) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	panel.add_child(title)
 
-	var resume := Button.new()
-	resume.position = Vector2(60, 92)
-	resume.size = Vector2(280, 52)
-	resume.focus_mode = Control.FOCUS_NONE
-	resume.text = "继续  [Esc]"
-	resume.add_theme_font_size_override("font_size", 20)
-	resume.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
-	resume.add_theme_stylebox_override("hover", _style_box(Color("493126"), Color("e0ad58"), 12, 3))
-	resume.pressed.connect(toggle_menu)
-	panel.add_child(resume)
-
-	var restart := Button.new()
-	restart.position = Vector2(60, 154)
-	restart.size = Vector2(280, 52)
-	restart.focus_mode = Control.FOCUS_NONE
-	restart.text = "重新开始  [R]"
-	restart.add_theme_font_size_override("font_size", 20)
-	restart.add_theme_stylebox_override("normal", _style_box(Color("2c211d"), Color("bd8b45"), 12, 2))
-	restart.add_theme_stylebox_override("hover", _style_box(Color("493126"), Color("e0ad58"), 12, 3))
-	restart.pressed.connect(func():
+	_menu_button("继续  [Esc]", 92, toggle_menu)
+	_menu_button("重新开始本战  [R]", 148, func():
 		close_menu()
-		restart_cb.call()
-	)
-	panel.add_child(restart)
-
-	var vol_label := _label(Vector2(60, 228), Vector2(280, 26), 16, Color("a9a49b"), false)
-	vol_label.text = "音效音量"
-	panel.add_child(vol_label)
-	var volume := HSlider.new()
-	volume.position = Vector2(60, 258)
-	volume.size = Vector2(280, 24)
-	volume.min_value = 0.0
-	volume.max_value = 1.0
-	volume.step = 0.05
-	volume.value = 0.8
-	volume.focus_mode = Control.FOCUS_NONE
-	volume.value_changed.connect(func(v: float): AudioServer.set_bus_volume_db(0, linear_to_db(maxf(v, 0.0001))))
-	panel.add_child(volume)
-
-	var shake_toggle := CheckButton.new()
-	shake_toggle.position = Vector2(60, 296)
-	shake_toggle.size = Vector2(280, 34)
-	shake_toggle.text = "画面震动"
-	shake_toggle.button_pressed = true
-	shake_toggle.focus_mode = Control.FOCUS_NONE
-	shake_toggle.toggled.connect(func(on: bool): shake_setter.call(on))
-	panel.add_child(shake_toggle)
+		restart_cb.call())
+	_menu_button("设  置", 204, func():
+		settings_screen.open())
+	_menu_button("离开夜巡（保存进度）", 260, func():
+		close_menu()
+		abandon_cb.call())
 
 	var hint_toggle := CheckButton.new()
-	hint_toggle.position = Vector2(60, 340)
+	hint_toggle.position = Vector2(60, 322)
 	hint_toggle.size = Vector2(280, 34)
 	hint_toggle.text = "操作提示"
 	hint_toggle.button_pressed = false
 	hint_toggle.focus_mode = Control.FOCUS_NONE
 	hint_toggle.toggled.connect(func(on: bool): hint_label.visible = on)
 	panel.add_child(hint_toggle)
+
+	var glossary := _label(Vector2(30, 372), Vector2(340, 120), 13, Color("9caaa9"), false)
+	glossary.text = "—— 更夫手册 ——\n防范：敌招落下前 Space；越近越接近完美\n还愿：防范所得，出符牌或召符\n乘势：完美接刀后的余韵，还刃加成\n鬼手：不可防范，用安魂或 2 点消解\n躁动：还愿囤 7 点，鬼会发狂"
+	panel.add_child(glossary)
+
+	settings_screen = SettingsScreenScript.new()
+	add_child(settings_screen)
 
 
 func _build_settlement() -> void:
@@ -160,7 +154,7 @@ func show_settlement(victory: bool) -> void:
 	if victory:
 		settle_title.text = "怨 已 归 还"
 		settle_title.add_theme_color_override("font_color", Color("f1d185"))
-		settle_sub.text = "灯油余 %d/%d · 历经 %d 招 · 完美接刀 x %d" % [sim.player_hp, BattleSimulationScript.PLAYER_MAX_HP, sim.attack_index + 1, sim.perfects]
+		settle_sub.text = "灯油余 %d/%d · 历经 %d 招 · 完美接刀 x %d" % [sim.player_hp, sim.player_max_hp, sim.attack_index + 1, sim.perfects]
 	else:
 		settle_title.text = "灯 灭 了"
 		settle_title.add_theme_color_override("font_color", Color("cf5555"))
@@ -172,7 +166,7 @@ func _label(pos: Vector2, size: Vector2, font_size: int, color: Color, bold: boo
 	var label := Label.new()
 	label.position = pos
 	label.size = size
-	label.add_theme_font_size_override("font_size", font_size + (1 if bold else 0))
+	label.add_theme_font_size_override("font_size", GameSettings.font(font_size) + (1 if bold else 0))
 	label.add_theme_color_override("font_color", color)
 	return label
 

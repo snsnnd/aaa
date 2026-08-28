@@ -30,7 +30,7 @@ var instruction_label: Label:
 var message_serial := 0
 
 
-func setup(s: BattleSimulationScript, command_cb: Callable, restart_cb: Callable) -> void:
+func setup(s: BattleSimulationScript, command_cb: Callable, restart_cb: Callable, abandon_cb: Callable) -> void:
 	sim = s
 	command = command_cb
 	_build_status()
@@ -41,7 +41,7 @@ func setup(s: BattleSimulationScript, command_cb: Callable, restart_cb: Callable
 	hand_view.setup(s, command_cb)
 	menu_overlay = MenuOverlayScript.new()
 	add_child(menu_overlay)
-	menu_overlay.setup(s, restart_cb, func(on: bool): _set_shake(on), hand_view.instruction_label)
+	menu_overlay.setup(s, restart_cb, abandon_cb, func(on: bool): _set_shake(on), hand_view.instruction_label)
 	refresh()
 
 
@@ -97,12 +97,12 @@ func _build_status() -> void:
 
 
 func refresh() -> void:
-	player_status.text = "执灯人｜灯油 %d / %d" % [sim.player_hp, BattleSimulationScript.PLAYER_MAX_HP]
+	player_status.text = "执灯人｜灯油 %d / %d" % [sim.player_hp, sim.player_max_hp]
 	var rage_tag := ""
 	if sim.rage >= 3:
 		rage_tag = "  ⚡躁%d" % sim.rage
 	enemy_status.text = "%s｜怨气 %d / %d%s" % [sim.enemy_name, maxi(0, sim.enemy_hp), sim.enemy_max_hp, rage_tag]
-	resource_status.text = "还愿 %d / %d    第 %d 招" % [sim.points, BattleSimulationScript.MAX_POINTS, sim.attack_index + 1]
+	resource_status.text = "还愿 %d / %d    第 %d 招" % [sim.points, sim._max_points(), sim.attack_index + 1]
 	hand_view.refresh_slots()
 
 
@@ -137,6 +137,8 @@ func show_message(text: String, color: Color, duration: float) -> void:
 
 
 func flash(color: Color, alpha: float, duration: float) -> void:
+	if GameSettings.flash_reduction:
+		alpha *= 0.35
 	flash_rect.color = color
 	flash_rect.color.a = alpha
 	var tween := create_tween().set_ignore_time_scale(true)
