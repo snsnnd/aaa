@@ -249,6 +249,10 @@ func enemy_staggered_fx() -> void:
 	add_trauma(0.2)
 
 
+func rage_flare(origin: Vector2) -> void:
+	vfx.rage_flare(origin)
+
+
 func present_death(victory: bool) -> void:
 	if victory:
 		hit_stop(0.3, 0.25)
