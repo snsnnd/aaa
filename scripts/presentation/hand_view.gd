@@ -12,12 +12,14 @@ var slot_titles: Dictionary = {}
 var slot_hints: Dictionary = {}
 var slot_classes: Dictionary = {}
 var slot_frames: Dictionary = {}
+var slot_costs: Dictionary = {}
 var pile_draw_box: Control
 var pile_discard_box: Control
 var instruction_label: Label
 var defense_button: Button
 var summon_button: Button
 var _card_textures: Dictionary = {}
+var _hovered_slot: int = -1
 
 
 func setup(s: BattleSimulationScript, command_cb: Callable) -> void:
@@ -95,11 +97,14 @@ func _create_slot_button(pos: Vector2, slot: int) -> void:
 	var button := Button.new()
 	button.position = pos
 	button.size = Vector2(142, 160)
+	button.pivot_offset = Vector2(71, 80)
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_stylebox_override("normal", _style_box(Color("151821"), Color("4a4438"), 12, 3))
 	button.add_theme_stylebox_override("hover", _style_box(Color("222631"), Color("6a6250"), 12, 4))
 	button.add_theme_stylebox_override("pressed", _style_box(Color("0d0f15"), Color("ead8a4"), 12, 5))
 	button.pressed.connect(_on_slot_pressed.bind(slot))
+	button.mouse_entered.connect(_on_card_hovered.bind(slot))
+	button.mouse_exited.connect(_on_card_unhovered.bind(slot))
 	add_child(button)
 
 	var icon := TextureRect.new()
@@ -109,6 +114,7 @@ func _create_slot_button(pos: Vector2, slot: int) -> void:
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	icon.z_index = 2
 	button.add_child(icon)
 
 	var frame := TextureRect.new()
@@ -120,28 +126,64 @@ func _create_slot_button(pos: Vector2, slot: int) -> void:
 	frame.z_index = 1
 	button.add_child(frame)
 
+	var cost_label := _label(Vector2(6, 6), Vector2(28, 24), 16, Color("fff1a8"), true)
+	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_label.z_index = 3
+	button.add_child(cost_label)
+
 	var title := _label(Vector2(8, 98), Vector2(126, 26), 18, Color("eee2c1"), true)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title.z_index = 2
+	title.z_index = 3
 	button.add_child(title)
 	var hint := _label(Vector2(8, 126), Vector2(126, 28), 12, Color("a9a49b"), false)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hint.z_index = 2
+	hint.z_index = 3
 	button.add_child(hint)
 	var class_tag := _label(Vector2(104, 6), Vector2(30, 24), 14, Color.WHITE, true)
 	class_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	class_tag.z_index = 2
+	class_tag.z_index = 3
 	button.add_child(class_tag)
 	card_buttons[slot] = button
 	slot_titles[slot] = title
 	slot_hints[slot] = hint
 	slot_classes[slot] = class_tag
 	slot_frames[slot] = frame
+	slot_costs[slot] = cost_label
+
+
+func _on_card_hovered(slot: int) -> void:
+	if slot < sim.hand.size():
+		_hovered_slot = slot
+		var button: Button = card_buttons[slot]
+		button.z_index = 35
+		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(button, "scale", Vector2(1.28, 1.28), 0.16)
+		tw.tween_property(button, "position:y", -24.0, 0.16)
+		# 谋定后动 (Tactical Bullet Time): 战术时空减速至 0.2x，从容阅读卡牌
+		if Engine.time_scale >= 0.95:
+			Engine.time_scale = 0.20
+
+
+func _on_card_unhovered(slot: int) -> void:
+	if slot < sim.hand.size():
+		if _hovered_slot == slot:
+			_hovered_slot = -1
+		var button: Button = card_buttons[slot]
+		button.z_index = 0
+		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(button, "scale", Vector2.ONE, 0.18)
+		tw.tween_property(button, "position:y", 12.0, 0.18)
+		# 恢复正常时间流速
+		if _hovered_slot == -1 and Engine.time_scale <= 0.25:
+			Engine.time_scale = 1.0
 
 
 func _on_slot_pressed(slot: int) -> void:
+	if Engine.time_scale <= 0.25:
+		Engine.time_scale = 1.0
 	if slot >= 0 and slot < sim.hand.size():
 		command.call({"type": "play_card", "id": sim.hand[slot]})
 
@@ -152,6 +194,7 @@ func rebuild_hand() -> void:
 		var button: Button = card_buttons[i]
 		var icon: TextureRect = button.get_child(0)
 		var frame: TextureRect = slot_frames[i]
+		var cost_lbl: Label = slot_costs[i]
 		var title: Label = slot_titles[i]
 		var hint: Label = slot_hints[i]
 		var class_tag: Label = slot_classes[i]
@@ -160,6 +203,7 @@ func rebuild_hand() -> void:
 			var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
 			var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[id]
 			icon.texture = _card_textures.get(id)
+			cost_lbl.text = str(data.cost)
 			title.text = "%s  [%d]" % [pres.title, i + 1]
 			hint.text = "%s·%d点｜%s" % [data["class"], data.cost, _card_short(id)]
 			class_tag.text = String(data["class"])
@@ -176,6 +220,7 @@ func rebuild_hand() -> void:
 		else:
 			icon.texture = null
 			frame.texture = null
+			cost_lbl.text = ""
 			title.text = ""
 			hint.text = ""
 			class_tag.text = ""

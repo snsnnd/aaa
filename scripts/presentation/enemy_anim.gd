@@ -117,6 +117,9 @@ func load_style(folder: String) -> void:
 func load_enemy_texture(id: String) -> void:
 	enemy_sprite.texture = load(PresentationCatalog.ENEMY_PRESENTATION[id].texture)
 	enemy_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_load_profile()
+	# 仅前任更夫使用独立敌刃，其余怪物使用内置专属武器/法术
+	weapon_pivot.visible = (id == "watchman")
 
 
 func sim() -> BattleSimulationScript:
@@ -144,6 +147,8 @@ func reset_pose() -> void:
 	ghost_hand.scale = Vector2.ONE
 	ghost_hand.modulate = Color.WHITE
 	ghost_hand.visible = false
+	var eid := enemy_id_for_profile()
+	weapon_pivot.visible = (eid == "watchman")
 
 
 func finish_action_fx() -> void:
@@ -284,13 +289,13 @@ func _red_slow_blade(ratio: float) -> void:
 		weapon_pivot.rotation = lerpf(-2.22, 1.45, commit)
 		enemy_sprite.position.x = lerpf(1016.0, 610.0, commit)
 		enemy_sprite.rotation = lerpf(0.045, -0.18, commit)
-	attack_trail.visible = ratio > 0.74
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-300, 0)])
-	attack_trail.position = enemy_sprite.position + Vector2(8, -30)
-	attack_trail.rotation = weapon_pivot.rotation + PI * 0.5
-	attack_trail.width = 8.0 + 20.0 * maxf(0.0, (ratio - 0.74) / 0.26)
-	attack_trail.default_color = Color("ead79c")
-	attack_trail.modulate.a = clampf((ratio - 0.74) / 0.12, 0.0, 0.8)
+	attack_trail.visible = (ratio > 0.74 and ratio < 0.96)
+	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-180, 50)])
+	attack_trail.position = enemy_sprite.position + Vector2(-40, -10)
+	attack_trail.rotation = -0.25 # 向左前下方斩切，消除右侧竖直异常光柱
+	attack_trail.width = 14.0
+	attack_trail.default_color = Color("fff1bd")
+	attack_trail.modulate.a = clampf((ratio - 0.74) / 0.12, 0.0, 0.85)
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
@@ -311,12 +316,12 @@ func _strike_combo(ratio: float) -> void:
 	enemy_sprite.rotation = -sin(commit * PI) * 0.085
 	var time_to_hit := strike_time - s.attack_elapsed
 	attack_trail.visible = time_to_hit <= 0.13 and time_to_hit >= -0.05
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-290, 0)])
-	attack_trail.position = enemy_sprite.position + Vector2(18, -26)
-	attack_trail.rotation = weapon_pivot.rotation + PI * 0.5
+	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-160, 40)])
+	attack_trail.position = enemy_sprite.position + Vector2(-30, -10)
+	attack_trail.rotation = -0.2
 	attack_trail.width = 12.0
 	attack_trail.default_color = PresentationCatalog.MOVE_PRESENTATION[String(s.current_intent.id)].color.lightened(0.35)
-	attack_trail.modulate.a = 0.68
+	attack_trail.modulate.a = 0.75
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 

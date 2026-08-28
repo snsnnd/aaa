@@ -124,8 +124,9 @@ func play_warning() -> void:
 	warning_audio.play()
 
 
-func play_card_sfx() -> void:
+func play_card_sfx(card_id: String = "") -> void:
 	card_audio.play()
+	player_anim.cast_card_action(card_id)
 
 
 func hit_stop(duration: float, time_scale: float) -> void:

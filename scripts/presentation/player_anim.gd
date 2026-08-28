@@ -109,12 +109,24 @@ func death_dim() -> void:
 	create_tween().tween_property(lantern_glow, "modulate:a", 0.08, 1.0)
 
 
+func cast_card_action(card_id: String) -> void:
+	fx.impulse_x = 22.0
+	fx.impulse_rot = 0.04
+	fx.glow_boost = 0.65
+	if lantern_pivot:
+		lantern_pivot.rotation = -0.18
+	var tw := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(player_sprite, "scale", Vector2(0.53, 0.46), 0.08)
+	tw.tween_property(player_sprite, "scale", Vector2(0.49, 0.49), 0.16)
+
+
 func tick(delta: float) -> void:
 	animation_time += delta
-	var p := anim_profile
-	var bs: float = anim_profile.breath_speed if anim_profile else 1.65
-	var bh: float = anim_profile.breath_height if anim_profile else 3.0
-	var idle_tilt: float = anim_profile.idle_tilt_angle if anim_profile else 0.006
+	var s := sim_ref()
+	var is_low_hp := s != null and s.player_hp < 25
+	var bs: float = (anim_profile.breath_speed if anim_profile else 1.65) * (1.5 if is_low_hp else 1.0)
+	var bh: float = (anim_profile.breath_height if anim_profile else 3.0) * (1.4 if is_low_hp else 1.0)
+	var idle_tilt: float = (anim_profile.idle_tilt_angle if anim_profile else 0.006) * (2.2 if is_low_hp else 1.0)
 	player_sprite.position = Vector2(0.0, sin(animation_time * bs) * bh)
 	player_sprite.rotation = sin(animation_time * bs * 0.75) * idle_tilt
 	_update_combat_pose(delta)
@@ -126,6 +138,10 @@ func tick(delta: float) -> void:
 	lantern_glow.scale = Vector2.ONE * (2.35 * (1.0 + 0.38 * fx.glow_boost))
 	lantern_glow.modulate.a = clampf((0.76 + flicker) * (1.0 + 0.5 * fx.glow_boost), 0.18, 1.0)
 	_update_talisman_trails()
+
+
+func sim_ref() -> BattleSimulationScript:
+	return get_parent().sim if get_parent() and get_parent().get("sim") else null
 
 
 func _update_combat_pose(delta: float) -> void:
