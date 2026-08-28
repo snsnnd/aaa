@@ -253,10 +253,10 @@ func present_death(victory: bool) -> void:
 	if victory:
 		hit_stop(0.3, 0.25)
 		enemy_anim.death_dissolve()
-		vfx.soul_motes(enemy_anim.enemy_sprite.position + Vector2(-30, -40), Color("9fdce2"), true)
+		vfx.death_dissolve(enemy_anim.enemy_sprite.position)
 	else:
 		player_anim.death_dim()
-		vfx.soul_motes(player_anim.player_pivot.position + Vector2(118, 40), Color("d86a5a"), false)
+		vfx.death_dissolve(player_anim.player_pivot.position + Vector2(118, 40))
 
 
 func restart_fx() -> void:
