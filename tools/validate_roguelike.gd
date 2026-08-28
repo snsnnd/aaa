@@ -24,6 +24,7 @@ func _init() -> void:
 	_check_boss_phases()
 	_check_wenlu_scry()
 	_check_combo_system()
+	_check_action_permissions()
 	_check_effect_floats()
 	_check_boss_phase_order()
 	_check_battle_seed_determinism()
@@ -268,8 +269,8 @@ func _check_combo_system() -> void:
 			started_a = true
 	_check("chain_startup_delayed", started_a and sim2.p_phase == BattleSimulationScript.PlayerActionPhase.STARTUP and sim2.enemy_hp == 46,
 		"hp=%d(未结算) phase=%d" % [sim2.enemy_hp, sim2.p_phase])
-	# 2b) 命中帧结算
-	var ev_b := sim2.step(0.25)
+	# 2b) 命中帧结算（seamless 把收招缩到 0.238——步长必须落在取消窗口内）
+	var ev_b := sim2.step(0.23)
 	var impact_b := false
 	var reaction_b := ""
 	for ev in ev_b:
@@ -380,6 +381,169 @@ func _check_combo_system() -> void:
 		if String(ev.get("type", "")) == "action_interrupted":
 			boss_interrupted = true
 	_check("combo_boss_interrupt_immune", not boss_interrupted and sim5.state == BattleSimulationScript.BattleState.WINDUP)
+
+
+# ————————————————————— 权限/中断/缓冲专项 —————————————————————
+
+func _check_action_permissions() -> void:
+	var ActionPerm: GDScript = preload("res://scripts/battle/action_permission.gd")
+	var ActionCatalogScript: GDScript = preload("res://scripts/battle/action_catalog.gd")
+	# A) Buffer 不早于 cancel start：极.天平倒悬 cancel_window=0 → 缓冲永不执行、显式丢弃
+	var sim := BattleSimulationScript.new()
+	sim.deck_config = Array(["tianping", "attack", "guard", "shift", "attack"], TYPE_STRING, "", null)
+	sim.restart()
+	sim.points = 9
+	sim.hand.clear()
+	for cid in ["tianping", "attack"]:
+		sim.hand.append(cid)
+	sim.submit({"type": "play_card", "id": "tianping"})   # 前摇 0.48 / 收招 0.60 / 窗口 0
+	sim.submit({"type": "play_card", "id": "attack"})      # 前摇中提交 → 缓冲
+	_check("perm_buffered", sim.p_queued == "attack")
+	var ev_a := sim.step(0.70)  # 越过命中(0.48)与收招(0.60)
+	ev_a.append_array(sim.step(0.10))  # 收招落账（取消窗口早已关闭）
+	var tianping_impact := false
+	var attack_started := false
+	var dropped := false
+	for ev in ev_a:
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "tianping":
+			tianping_impact = true
+		if String(ev.get("type", "")) == "action_started" and String(ev.get("id", "")) == "attack":
+			attack_started = true
+		if String(ev.get("type", "")) == "action_buffered_dropped":
+			dropped = true
+	_check("perm_zero_window_no_cancel", tianping_impact and not attack_started and dropped,
+		"impact=%s attack=%s dropped=%s" % [tianping_impact, attack_started, dropped])
+	_check("perm_zero_window_no_damage", sim.enemy_hp == 46 - 30, "hp=%d" % sim.enemy_hp)
+	# B) cancel_window == 0 的动作不能在命中帧提前接下一张（无 action_canceled）
+	var had_cancel := false
+	for ev in ev_a:
+		if String(ev.get("type", "")) == "action_canceled":
+			had_cancel = true
+	_check("perm_no_cancel_on_zero_window", not had_cancel)
+	# C) parry_cancel = ANY（RULE 类）：出招中防反 → 立刻弃招转防反
+	var sim2 := BattleSimulationScript.new()
+	sim2.deck_config = Array(["jieshi", "attack", "guard", "shift", "attack"], TYPE_STRING, "", null)
+	sim2.restart()
+	sim2.points = 9
+	sim2.hand.clear()
+	for cid in ["jieshi", "attack"]:
+		sim2.hand.append(cid)
+	sim2.submit({"type": "play_card", "id": "jieshi"})   # RULE → ANY
+	sim2.attack_elapsed = float(sim2.current_intent.duration) - 0.10
+	var ev_c := sim2.submit({"type": "defend"})
+	var canceled_by_parry := false
+	for ev in ev_c:
+		if String(ev.get("type", "")) == "action_canceled" and String(ev.get("by", "")) == "parry":
+			canceled_by_parry = true
+	_check("perm_parry_cancel_any", canceled_by_parry and sim2.p_phase == BattleSimulationScript.PlayerActionPhase.IDLE,
+		"canceled=%s phase=%d" % [canceled_by_parry, sim2.p_phase])
+	# D) parry_cancel = NONE（还刃）：出招中防反不弃招
+	var sim3 := BattleSimulationScript.new()
+	sim3.deck_config = Array(["shatter", "attack", "guard", "shift", "attack"], TYPE_STRING, "", null)
+	sim3.restart()
+	sim3.points = 9
+	sim3.hand.clear()
+	for cid in ["shatter", "attack"]:
+		sim3.hand.append(cid)
+	sim3.submit({"type": "play_card", "id": "shatter"})
+	sim3.attack_elapsed = float(sim3.current_intent.duration) - 0.10
+	var ev_d := sim3.submit({"type": "defend"})
+	var shatter_canceled := false
+	for ev in ev_d:
+		if String(ev.get("type", "")) == "action_canceled":
+			shatter_canceled = true
+	_check("perm_parry_cancel_none", not shatter_canceled and sim3.p_phase != BattleSimulationScript.PlayerActionPhase.IDLE,
+		"canceled=%s" % shatter_canceled)
+	# E) NORMAL 动作被击中后不能继续命中：蓝刀先于攻击命中帧落地 → 动作取消、无伤害
+	var sim4 := BattleSimulationScript.new()
+	sim4.deck_config = Array(["attack", "attack", "guard", "shift", "shatter"], TYPE_STRING, "", null)
+	sim4.restart()
+	sim4.attack_index = 1
+	sim4._begin_attack()  # 蓝·变拍二连，首段 0.82
+	sim4.points = 9
+	sim4.hand.clear()
+	for cid in ["attack", "attack"]:
+		sim4.hand.append(cid)
+	sim4.attack_elapsed = 0.80
+	var ev_e := sim4.submit({"type": "play_card", "id": "attack"})  # 命中帧 0.22 → 蓝 1.02
+	ev_e.append_array(sim4.step(0.05))  # 蓝 0.82 先落地
+	var attack_impacted := false
+	var canceled_by_hit := false
+	for ev in ev_e:
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "attack":
+			attack_impacted = true
+		if String(ev.get("type", "")) == "action_canceled" and String(ev.get("by", "")) == "hit":
+			canceled_by_hit = true
+	_check("perm_hit_interrupts_normal", canceled_by_hit and not attack_impacted and sim4.enemy_hp == 46,
+		"hit_interrupt=%s impacted=%s hp=%d" % [canceled_by_hit, attack_impacted, sim4.enemy_hp])
+	# F) ARMOR：极.天平倒悬被击中仍继续结算
+	var sim5 := BattleSimulationScript.new()
+	sim5.deck_config = Array(["tianping", "attack", "guard", "shift", "attack"], TYPE_STRING, "", null)
+	sim5.restart()
+	sim5.attack_index = 1
+	sim5._begin_attack()
+	sim5.points = 9
+	sim5.hand.clear()
+	for cid in ["tianping", "attack"]:
+		sim5.hand.append(cid)
+	sim5.attack_elapsed = 0.80
+	sim5.submit({"type": "play_card", "id": "tianping"})  # 命中帧 0.48 → 蓝 1.28
+	var took_damage := false
+	var tianping_impacted := false
+	var was_interrupted := false
+	var evs_f := sim5.submit({"type": "play_card", "id": "attack"})  # 缓冲
+	evs_f.append_array(sim5.step(0.55))  # 蓝 0.82 命中玩家（霸体不中断）+ 天平命中帧 1.28
+	evs_f.append_array(sim5.step(0.10))  # 收招落账
+	for ev in evs_f:
+		if String(ev.get("type", "")) == "impact":
+			took_damage = true
+		if String(ev.get("type", "")) == "action_canceled" and String(ev.get("by", "")) == "hit":
+			was_interrupted = true
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "tianping":
+			tianping_impacted = true
+	# 霸体：吃了伤害、动作未被中断、命中帧照常结算
+	_check("perm_armor_continues", took_damage and not was_interrupted and tianping_impacted and sim5.enemy_hp == 16,
+		"damage=%s interrupted=%s impacted=%s hp=%d" % [took_damage, was_interrupted, tianping_impacted, sim5.enemy_hp])
+	# G) Seamless 确实比普通连接更快：recovery_mul 实际缩放时间轴
+	var sim6 := BattleSimulationScript.new()
+	sim6.restart()
+	var base_recovery := float(ActionCatalogScript.ACTIONS["act_attack"]["recovery"])
+	sim6.points = 9
+	sim6.hand.clear()
+	sim6.hand.append("attack")
+	sim6.submit({"type": "play_card", "id": "attack"})  # open：mul 1.0
+	_check("perm_open_recovery_base", absf(float(sim6.p_action["recovery"]) - base_recovery) < 0.001,
+		"recovery=%.3f" % float(sim6.p_action["recovery"]))
+	sim6.action_state.current_pose = "parry_exit"
+	sim6.action_state.combo_level = 1
+	sim6.action_state.combo_timer = 1.0
+	sim6.hand.append("attack")
+	sim6.points = 9
+	sim6.submit({"type": "play_card", "id": "attack"})  # parry_exit→low seamless：mul 0.85
+	_check("perm_seamless_faster", float(sim6.p_action["recovery"]) < base_recovery,
+		"recovery=%.3f < %.3f" % [float(sim6.p_action["recovery"]), base_recovery])
+	# H) Queued action 不会无故丢失：缓冲恰好执行一次
+	var sim7 := BattleSimulationScript.new()
+	sim7.deck_config = Array(["attack", "zhuying", "guard", "shift", "attack"], TYPE_STRING, "", null)
+	sim7.restart()
+	sim7.points = 9
+	sim7.hand.clear()
+	for cid in ["attack", "zhuying"]:
+		sim7.hand.append(cid)
+	sim7.submit({"type": "play_card", "id": "attack"})
+	sim7.submit({"type": "play_card", "id": "zhuying"})  # 前摇中缓冲
+	var started_count := 0
+	var impact_count := 0
+	var evs_h := sim7.step(0.30)  # 攻击命中帧 0.22 → 缓冲的 zhuying 在取消窗口执行
+	for ev in evs_h:
+		if String(ev.get("type", "")) == "action_started" and String(ev.get("id", "")) == "zhuying":
+			started_count += 1
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "zhuying":
+			impact_count += 1
+	_check("perm_queue_executes_once", started_count == 1 and sim7.p_card == "zhuying",
+		"started=%d p_card=%s" % [started_count, sim7.p_card])
+	sim7.step(0.4)
+	_check("perm_queue_impact_once", impact_count == 1 and sim7.enemy_hp == 46 - 5 - 4, "hp=%d" % sim7.enemy_hp)
 
 
 # ————————————————————— Effect 数值完整性 —————————————————————

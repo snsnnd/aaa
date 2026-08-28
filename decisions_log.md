@@ -193,3 +193,14 @@
 - **表现层全量接入**：PlayerActionController 按时间轴分段驱动（前摇蓄→命中冲与 impact_time 同步→收招回）；新增 `action_buffered`（预输入提示）与 `action_canceled`（取消衔接提示）表现。
 - **敌人受击七级差异化**：LIGHT 轻顿 / MEDIUM 后退 / HEAVY 大仰+武器下沉 / BREAK 破势僵直+红光 / FINISHER 失衡+消散色 / STAGGER 凝滞冻结感 / INTERRUPT 鬼手截停——连打四张牌不再"闪四下"。
 - **验证**：完整链路测试（防反→起手→命中帧未提前结算→取消衔接→预输入→缓冲执行→层级升级 MEDIUM→BREAK→受击清空连势→动作继续）+ 全量回归：roguelike 54/54、冒烟、三构筑、playtest 通关全过。
+
+### D31: 动作系统收敛——权限统一、真节奏、表现接管（对照 ACTION_FEEL_RESEARCH 要素）✅
+- **ActionPermission 统一权限层**：出牌/防反/召符/Buffer 的资格判断与"entry_route"（start/cancel/buffer）路由全部收敛到 `action_permission.gd`；受击中断策略（NORMAL/ARMOR/UNINTERRUPTIBLE）与防反取消策略（NONE/LATE/ANY）也在此判定，规则不再散落。
+- **Buffer 不能绕过 Cancel Window**：缓冲牌只在合法取消窗口开启瞬间执行；`cancel_window == 0` 的动作（极·天平倒悬）永远不执行缓冲，未消费的缓冲在收招结束时显式丢弃（`action_buffered_dropped`，卡未扣费）。
+- **防反取消策略落位**：RULE/符术类 = ANY（随时弃招转防反）；finisher 大承诺 = NONE（出招中防反不打断自己，但敌人照打）；其余 = LATE（按正常取消窗口）。完美防反时窗 1.0s / 普通 0.7s。
+- **受击中断/霸体落位**：NORMAL 动作被击中即取消（未到命中帧的动作不再结算——攻击有真实风险了）；极·天平倒悬/金身 = ARMOR（吃伤害但命中帧照常结算）。
+- **Combo 类型影响真实节奏**：recovery_mul 实际缩放收招与取消窗口（seamless 0.85 → 更快再衔接；heavy_swap 1.3 → 更慢），"连得顺"从纯表现变成时间轴事实。
+- **Motion Channel（Tween 竞争修复）**：`motion_channel.gd` 按语义通道（player_pivot/enemy_pos/enemy_flash/enemy_weapon/player_flash）独占 Tween——新动作 kill 旧 Tween 接管，连招加速不再抖动/瞬移（godot-tween-animation skill: kill-replace 模式）。
+- **反馈分层落地**（game-feel skill: importance tiers + ACTION_FEEL_RESEARCH 要素 1/7）：`feedback_tiers.gd` 把受击层级映射到 hitstop（HEAVY 以上才停时间，0.05–0.12s，real-time timer 恢复）+ 震屏强度 + SFX 音量。
+- **音效反馈补位**（手感链条最后通道，程序化合成 `tools/generate_sfx.py`）：挥砍 whoosh（轻/重）、命中四档（crunch/thud/boom）、终结 boom、完美防反打铁 ding、预输入/取消 tick——每音效 3 变体轮换 + 音调微移防重复感。
+- **验证**：新增 8 项权限/中断/缓冲专项测试（零窗口不取消/ANY 弃招/NONE 不弃招/受击中断/霸体继续/开招基准收招/seamless 更快/缓冲恰好执行一次），roguelike **62/62**；冒烟、三构筑、playtest 通关全过。

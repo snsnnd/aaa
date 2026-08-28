@@ -8,6 +8,7 @@ const ActionCatalogScript := preload("res://scripts/battle/action_catalog.gd")
 const ComboSystemScript := preload("res://scripts/battle/combo_system.gd")
 const ActionStateScript := preload("res://scripts/battle/action_state.gd")
 const EnemyTimelineScript := preload("res://scripts/battle/enemy_timeline.gd")
+const ActionPermissionScript := preload("res://scripts/battle/action_permission.gd")
 
 ## 纯规则层：不含 Node、输入、音频、动画或任何 Godot 场景对象。
 ## 输入只能是 submit() 的命令，输出只能是事件数组，状态全部可读、可快照。
@@ -293,22 +294,14 @@ func _scry_pick(index: int) -> Array:
 
 func _summon_card() -> Array:
 	var events: Array = []
-	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
-		events.append({"type": "summon_rejected", "reason": "ended"})
+	var permission: Dictionary = ActionPermissionScript.can_summon(self)
+	if not bool(permission["ok"]):
+		events.append({"type": "summon_rejected", "reason": String(permission["reason"])})
 		return events
-	if hand.size() >= HAND_SIZE:
-		events.append({"type": "summon_rejected", "reason": "hand_full"})
-		return events
-	var scost := SUMMON_COST - (1 if perfect_charge else 0)
-	if points < scost:
-		events.append({"type": "summon_rejected", "reason": "points"})
-		return events
+	var scost: int = SUMMON_COST - (1 if perfect_charge else 0)
 	var pool: Array[String] = []
 	pool.append_array(draw_pile)
 	pool.append_array(discard_pile)
-	if pool.is_empty():
-		events.append({"type": "summon_rejected", "reason": "empty"})
-		return events
 	points -= scost
 	stats.summons = int(stats.get("summons", 0)) + 1
 	stats.points_spent = int(stats.get("points_spent", 0)) + scost
@@ -372,7 +365,7 @@ func _step_player_action(delta: float, events: Array) -> void:
 			if p_elapsed >= float(p_action.get("impact_time", 0.2)):
 				p_phase = PlayerActionPhase.CANCEL
 				_resolve_action_impact(events)
-				# 预输入在取消窗口开启瞬间执行（命中确认取消）
+				# 预输入在取消窗口开启瞬间执行（命中确认取消）；无窗口则不执行
 				_try_execute_queued(events)
 		PlayerActionPhase.CANCEL:
 			p_elapsed += delta
@@ -381,29 +374,26 @@ func _step_player_action(delta: float, events: Array) -> void:
 
 
 ## 提交卡牌：IDLE 直接起手；取消窗口内=取消衔接；其余阶段进入预输入缓冲。
+## 权限判定统一走 ActionPermission。
 func _play_card(id: String) -> Array:
 	var events: Array = []
-	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
-		events.append({"type": "card_rejected", "id": id, "reason": "ended"})
-		return events
-	if not scry_options.is_empty():
-		events.append({"type": "card_rejected", "id": id, "reason": "scrying"})
-		return events
-	if not hand.has(id):
-		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
+	var permission: Dictionary = ActionPermissionScript.can_play_card(self, id)
+	if not bool(permission["ok"]):
+		events.append({"type": "card_rejected", "id": id, "reason": String(permission["reason"])})
 		return events
 	# 状态归一化：把已到期但未落账的命中/收招先处理掉（零步长刷新）
 	_step_player_action(0.0, events)
-	if p_phase != PlayerActionPhase.IDLE:
-		if _in_cancel_window():
+	match ActionPermissionScript.entry_route(self):
+		"start":
 			_start_player_action(id, events)
-		else:
-			# 预输入：前摇/收招中提交的下一张牌存入缓冲（单槽，后输入覆盖），取消窗口开启时执行
+		"cancel":
+			_start_player_action(id, events)
+		"buffer":
+			# 预输入：前摇/收招中提交的下一张牌存入缓冲（单槽，后输入覆盖），
+			# 必须等合法取消窗口开启后才执行；cancel_window == 0 的动作不会执行缓冲
 			if p_queued != id:
 				p_queued = id
 				events.append({"type": "action_buffered", "id": id})
-	else:
-		_start_player_action(id, events)
 	return events
 
 
@@ -436,6 +426,11 @@ func _start_player_action(id: String, events: Array) -> void:
 	var chain_open := was_canceling or (p_phase == PlayerActionPhase.IDLE and action_state.is_chain_open())
 	var combo_result: Dictionary = combo_system.resolve(action_state, action_def, chain_open, ComboSystemScript.FINISHER_LEVEL)
 	p_card = id
+	# Combo 类型真正影响动作节奏：recovery_mul 缩放收招与取消窗口
+	action_def = action_def.duplicate()
+	var rec_mul := float(combo_result.get("recovery_mul", 1.0))
+	action_def["recovery"] = float(action_def.get("recovery", 0.3)) * rec_mul
+	action_def["cancel_window"] = float(action_def.get("cancel_window", 0.0)) * rec_mul
 	p_action = action_def
 	p_combo = combo_result
 	p_elapsed = 0.0
@@ -490,6 +485,9 @@ func _try_execute_queued(events: Array) -> void:
 	if p_queued == "" or state == BattleState.VICTORY or state == BattleState.DEFEAT:
 		p_queued = ""
 		return
+	# Buffer 不能绕过 Cancel Window：cancel_window == 0 的动作永远不执行缓冲
+	if not ActionPermissionScript.cancel_window_open(self):
+		return
 	var id := p_queued
 	p_queued = ""
 	if hand.has(id):
@@ -501,6 +499,10 @@ func _try_execute_queued(events: Array) -> void:
 func _finish_player_action(events: Array) -> void:
 	if p_phase == PlayerActionPhase.IDLE:
 		return
+	if p_queued != "":
+		# 缓冲牌未等到合法取消窗口：显式丢弃（卡未扣费，仍在手牌）
+		events.append({"type": "action_buffered_dropped", "id": p_queued})
+		p_queued = ""
 	events.append({"type": "action_finished", "id": p_card, "recovery_mul": float(p_combo.get("recovery_mul", 1.0))})
 	p_phase = PlayerActionPhase.IDLE
 	p_card = ""
@@ -555,11 +557,17 @@ func _collect_fake_events(events: Array) -> void:
 
 func _attempt_defense() -> Array:
 	var events: Array = []
-	if state != BattleState.WINDUP or queued_defense != DefenseGrade.NONE:
+	var permission: Dictionary = ActionPermissionScript.can_defend(self)
+	if not bool(permission["ok"]):
+		if String(permission["reason"]) == "cooldown":
+			events.append({"type": "defense_blocked"})
 		return events
-	if defense_cooldown > 0.0:
-		events.append({"type": "defense_blocked"})
-		return events
+	# 防反取消自己动作：按当前动作的 parry_cancel 策略
+	if p_phase != PlayerActionPhase.IDLE:
+		var policy := ActionPermissionScript.parry_cancel_policy(p_action)
+		if policy == ActionPermissionScript.PARRY_ANY:
+			events.append({"type": "action_canceled", "from": p_card, "by": "parry"})
+			_finish_player_action(events)
 	if bool(current_intent.get("unblockable", false)):
 		if points >= 2:
 			points -= 2
@@ -670,6 +678,10 @@ func _resolve_impact(events: Array) -> void:
 			perfect_charge = false
 			var damage := _incoming_damage()
 			player_hp = maxi(0, player_hp - damage)
+			# 受击中断/霸体：NORMAL 动作被击中即中断（未命中的动作不再结算）
+			if p_phase != PlayerActionPhase.IDLE and ActionPermissionScript.hit_policy(p_action) == ActionPermissionScript.HIT_NORMAL:
+				events.append({"type": "action_canceled", "from": p_card, "by": "hit"})
+				_finish_player_action(events)
 			action_state.on_player_hit()  # 受击清空连势（设计：受伤、停顿、失误清空）
 			stats.unblocked_hits = int(stats.get("unblocked_hits", 0)) + 1
 			stats.damage_taken = int(stats.get("damage_taken", 0)) + damage

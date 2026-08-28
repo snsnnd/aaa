@@ -11,6 +11,7 @@ const BattleStageScript := preload("res://scripts/presentation/battle_stage.gd")
 const PlayerAnimScript := preload("res://scripts/presentation/player_anim.gd")
 const EnemyAnimScript := preload("res://scripts/presentation/enemy_anim.gd")
 const BattleVfxScript := preload("res://scripts/presentation/battle_vfx.gd")
+const MotionChannelScript := preload("res://scripts/presentation/motion_channel.gd")
 
 var sim: BattleSimulationScript
 var fx: FxStateScript
@@ -22,6 +23,9 @@ var parry_audio: AudioStreamPlayer
 var hurt_audio: AudioStreamPlayer
 var card_audio: AudioStreamPlayer
 var warning_audio: AudioStreamPlayer
+var motion: MotionChannelScript
+var sfx_pool: Dictionary = {}
+var _sfx_last_variant: Dictionary = {}
 var animation_time := 0.0
 var hitstop_running := false
 var loaded_enemy := ""
@@ -81,6 +85,29 @@ func setup(s: BattleSimulationScript) -> void:
 	hurt_audio = _audio_player(PresentationCatalog.AUDIO.hurt)
 	card_audio = _audio_player(PresentationCatalog.AUDIO.card)
 	warning_audio = _audio_player(PresentationCatalog.AUDIO.warning)
+	motion = MotionChannel.new()
+	motion.setup(self)
+
+
+## 播放动作系统 SFX：同 key 的 3 个变体轮换（game-feel: SFX variation 防重复感）。
+func play_sfx(key: String, volume_db := 0.0, pitch_jitter := 0.04) -> void:
+	var base: String = PresentationCatalog.SFX.get(key, "")
+	if base == "":
+		return
+	var variant: int = int(_sfx_last_variant.get(key, -1))
+	var next_variant: int = (variant + 1 + randi() % 2) % 3
+	_sfx_last_variant[key] = next_variant
+	var path: String = base.replace(".wav", "_%d.wav" % next_variant)
+	var player: AudioStreamPlayer = sfx_pool.get(path)
+	if player == null:
+		if not ResourceLoader.exists(path):
+			return
+		player = _audio_player(path)
+		player.volume_db = volume_db
+		sfx_pool[path] = player
+	player.volume_db = volume_db
+	player.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
+	player.play()
 
 
 func _audio_player(path: String) -> AudioStreamPlayer:

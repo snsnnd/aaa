@@ -244,3 +244,17 @@ const AUDIO := {
 	"card": "res://assets/demo/audio/card.wav",
 	"warning": "res://assets/demo/audio/warning.wav",
 }
+
+## 动作系统 SFX（程序化生成，tools/generate_sfx.py；每音效含 _0/_1/_2 变体防重复感）
+const SFX := {
+	"swing_light": "res://assets/game/audio/sfx/sfx_swing_light.wav",
+	"swing_heavy": "res://assets/game/audio/sfx/sfx_swing_heavy.wav",
+	"impact_light": "res://assets/game/audio/sfx/sfx_impact_light.wav",
+	"impact_medium": "res://assets/game/audio/sfx/sfx_impact_medium.wav",
+	"impact_heavy": "res://assets/game/audio/sfx/sfx_impact_heavy.wav",
+	"impact_break": "res://assets/game/audio/sfx/sfx_impact_break.wav",
+	"finisher": "res://assets/game/audio/sfx/sfx_finisher.wav",
+	"cancel": "res://assets/game/audio/sfx/sfx_cancel.wav",
+	"buffer": "res://assets/game/audio/sfx/sfx_buffer.wav",
+	"parry_perfect": "res://assets/game/audio/sfx/sfx_parry_perfect.wav",
+}

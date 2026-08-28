@@ -270,11 +270,16 @@ func _handle_event(event: Dictionary) -> void:
 		"action_started":
 			player_action.on_action_started(String(event.get("transition", "")), String(event.get("movement", "none")), int(event.get("vfx_tier", 0)),
 				float(event.get("startup", 0.1)), float(event.get("impact_time", 0.2)), float(event.get("recovery", 0.3)))
+			# 挥砍音：重位移动作用重 whoosh；音调微移在 play_sfx 内做变化
+			var swing := "swing_heavy" if String(event.get("movement", "none")) in ["lunge", "leap", "dash"] else "swing_light"
+			view.play_sfx(swing, -8.0)
 			if String(event.get("transition", "")) == "seamless" and int(event.get("combo_level", 0)) >= 2:
 				hud.show_message("连·%d ｜ 连势 %d" % [int(event.combo_level), int(event.momentum)], Color("f2d487"), 0.7)
 		"action_buffered":
+			view.play_sfx("buffer", -6.0)
 			hud.show_message("预输入 · %s" % CardSystemScript.title_of(String(event.id)), Color("9caaa9"), 0.6)
 		"action_canceled":
+			view.play_sfx("cancel", -6.0)
 			hud.show_message("取消衔接 → %s" % CardSystemScript.title_of(String(event.get("by", ""))), Color("7fc5cd"), 0.7)
 		"action_impact":
 			enemy_reaction.react(String(event.get("level", "LIGHT")), int(event.get("vfx_tier", 0)))
@@ -389,6 +394,7 @@ func _present_impact(event: Dictionary) -> void:
 			hud.show_message("化解｜还愿 +1", view.intent_color().lightened(0.30), 0.6)
 		BattleSimulationScript.DefenseGrade.PERFECT:
 			view.perfect_impact_fx()
+			view.play_sfx("parry_perfect", 0.0)
 			hud.flash(Color(1.0, 0.88, 0.56), 0.68, 0.18)
 			hud.show_message("完美接刀｜还愿 +1 · 乘势", Color("f2d487"), 0.8)
 		_:
