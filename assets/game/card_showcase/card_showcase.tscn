@@ -1,0 +1,184 @@
+[gd_scene load_steps=4 format=3 uid="uid://c8_card_showcase_01"]
+
+[ext_resource type="Script" path="res://assets/game/card_showcase/card_showcase.gd" id="1_showcase"]
+[ext_resource type="Script" path="res://assets/game/card_showcase/scripts/hand_fan_container.gd" id="2_fan"]
+[ext_resource type="PackedScene" path="res://assets/game/card_showcase/scenes/modular_card_view.tscn" id="3_inspect_card"]
+
+[node name="CardShowcase" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_showcase")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.06, 0.07, 0.09, 1)
+
+[node name="Stage" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 340.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="InspectorArea" type="Control" parent="Stage"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = 30.0
+offset_right = 300.0
+offset_bottom = 320.0
+grow_horizontal = 2
+
+[node name="InspectCardView" parent="Stage/InspectorArea" instance=ExtResource("3_inspect_card")]
+layout_mode = 0
+offset_left = 60.0
+offset_top = 20.0
+offset_right = 240.0
+offset_bottom = 272.0
+
+[node name="InspectDesc" type="RichTextLabel" parent="Stage/InspectorArea"]
+layout_mode = 0
+offset_left = 280.0
+offset_top = 30.0
+offset_right = 580.0
+offset_bottom = 260.0
+theme_override_colors/default_color = Color(0.85, 0.88, 0.92, 1)
+theme_override_font_sizes/normal_font_size = 14
+bbcode_enabled = true
+text = "【卡牌名】: 还刃
+【类别】: 斩
+【还愿消耗】: 2 点
+【规则效果】: 散去 12 怨气
+乘势加成: 僵直内 +6"
+
+[node name="FeedbackLabel" type="Label" parent="Stage"]
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 280.0
+offset_right = 250.0
+offset_bottom = 310.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+theme_override_font_sizes/font_size = 15
+text = "提示信息"
+horizontal_alignment = 1
+
+[node name="HandArea" type="Control" parent="Stage"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -360.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="HandFanContainer" type="Control" parent="Stage/HandArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_fan")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="Panel" parent="UI"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 320.0
+offset_bottom = 704.0
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "✦ 卡牌重构与手牌模拟器"
+horizontal_alignment = 1
+
+[node name="HandSimTitle" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+theme_override_font_sizes/font_size = 13
+text = "手牌模拟控制 (Hand Simulator):"
+
+[node name="PointsRow" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="PointsLabel" type="Label" parent="UI/Panel/VBox/PointsRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "还愿点: "
+
+[node name="PointsSlider" type="HSlider" parent="UI/Panel/VBox/PointsRow"]
+layout_mode = 3
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 9.0
+value = 4.0
+
+[node name="PointsVal" type="Label" parent="UI/Panel/VBox/PointsRow"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "4 点"
+horizontal_alignment = 2
+
+[node name="StaggerCheck" type="CheckBox" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "模拟【僵直乘势窗口】"
+
+[node name="BtnDrawHand" type="Button" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "重新发牌 / 补满手牌"
+
+[node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ListTitle" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "全卡池鉴赏 (30 张卡牌库):"
+
+[node name="Scroll" type="ScrollContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CardList" type="VBoxContainer" parent="UI/Panel/VBox/Scroll"]
+layout_mode = 3
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[connection signal="value_changed" from="UI/Panel/VBox/PointsRow/PointsSlider" to="." method="_on_points_slider_value_changed"]
+[connection signal="toggled" from="UI/Panel/VBox/StaggerCheck" to="." method="_on_stagger_check_toggled"]
+[connection signal="pressed" from="UI/Panel/VBox/BtnDrawHand" to="." method="_on_draw_btn_pressed"]

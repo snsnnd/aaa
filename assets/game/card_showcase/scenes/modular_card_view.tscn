@@ -1,0 +1,150 @@
+[gd_scene load_steps=5 format=3 uid="uid://c8_mod_card_01"]
+
+[ext_resource type="Script" path="res://assets/game/card_showcase/scripts/modular_card_view.gd" id="1_card"]
+[ext_resource type="Texture2D" path="res://assets/game/ui/card_frame_zhan.png" id="2_frame"]
+[ext_resource type="Texture2D" path="res://assets/demo/card_attack.png" id="3_icon"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_add"]
+blend_mode = 1
+
+[node name="ModularCardView" type="Control"]
+custom_minimum_size = Vector2(180, 252)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 180.0
+offset_bottom = 252.0
+pivot_offset = Vector2(90, 126)
+script = ExtResource("1_card")
+icon_texture = ExtResource("3_icon")
+
+[node name="CardPivot" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+pivot_offset = Vector2(90, 126)
+mouse_filter = 2
+
+[node name="FrameTexture" type="TextureRect" parent="CardPivot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_frame")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="IconTexture" type="TextureRect" parent="CardPivot"]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 22.0
+offset_right = 162.0
+offset_bottom = 148.0
+mouse_filter = 2
+texture = ExtResource("3_icon")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TitleLabel" type="Label" parent="CardPivot"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 152.0
+offset_right = 160.0
+offset_bottom = 176.0
+theme_override_colors/font_color = Color(0.95, 0.9, 0.8, 1)
+theme_override_font_sizes/font_size = 14
+text = "斩纸"
+horizontal_alignment = 1
+
+[node name="DescLabel" type="RichTextLabel" parent="CardPivot"]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 176.0
+offset_right = 158.0
+offset_bottom = 234.0
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.85, 0.8, 0.75, 1)
+theme_override_font_sizes/normal_font_size = 10
+bbcode_enabled = true
+text = "散去 [color=#bd3d45]5[/color] 怨气"
+fit_content = true
+scroll_active = false
+autowrap_mode = 2
+
+[node name="CostBadge" type="Control" parent="CardPivot"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 38.0
+offset_bottom = 38.0
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="CardPivot/CostBadge"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0.95, 0.6, 1)
+theme_override_font_sizes/font_size = 15
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ClassBadge" type="Control" parent="CardPivot"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 144.0
+offset_top = 10.0
+offset_right = 170.0
+offset_bottom = 34.0
+mouse_filter = 2
+
+[node name="ClassLabel" type="Label" parent="CardPivot/ClassBadge"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+theme_override_font_sizes/font_size = 12
+text = "斩"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StaggerGlow" type="TextureRect" parent="CardPivot"]
+visible = false
+material = SubResource("CanvasItemMaterial_add")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -4.0
+offset_top = -4.0
+offset_right = 4.0
+offset_bottom = 4.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_frame")
+expand_mode = 1
+modulate = Color(1, 0.65, 0.2, 0.6)
+
+[node name="DarkOverlay" type="ColorRect" parent="CardPivot"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.04, 0.05, 0.07, 0.58)
