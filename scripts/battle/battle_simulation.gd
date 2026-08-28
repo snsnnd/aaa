@@ -28,6 +28,7 @@ const MOVES := ContentCatalog.MOVES
 const ENEMIES := ContentCatalog.ENEMIES
 
 var state: BattleState = BattleState.WINDUP
+var initial_hp := PLAYER_MAX_HP
 var player_hp := PLAYER_MAX_HP
 var enemy_hp := 46
 var points := 0
@@ -71,17 +72,25 @@ var current_intent: Dictionary = {}
 func content_hash() -> int:
 	## 玩法内容指纹：仅含规则字段；表现改动不影响此值。
 	var parts: Array[String] = []
-	parts.append("pw=%d/gr=%d/mc=%d/sc=%d" % [PERFECT_WINDOW, SUCCESS_GRACE, MAX_POINTS, SUMMON_COST])
+	parts.append("pw=%.3f/gr=%.3f/mc=%d/sc=%d" % [PERFECT_WINDOW, SUCCESS_GRACE, MAX_POINTS, SUMMON_COST])
 	parts.append("hp=%d/deck=%s" % [PLAYER_MAX_HP, ",".join(STARTING_DECK)])
 	for id in CARD_DATA:
 		var c: Dictionary = CARD_DATA[id]
-		parts.append("c:%s=%d/%s/%s" % [id, int(c.cost), String(c["class"]), str(c.get("damage", c.get("heal", 0)))])
+		parts.append("c:%s=%d/%s/d=%s/h=%s/b=%s/st=%s/cl=%s/m=%s/f=%s" % [
+			id, int(c.cost), String(c["class"]),
+			str(c.get("damage", 0)), str(c.get("heal", 0)), str(c.get("bonus", 0)),
+			str(c.get("stagger", 0.0)), str(bool(c.get("cleanse", false))),
+			str(c.get("mirror", 0)), str(c.get("fear_mul", 1.0))
+		])
 	for mid in MOVES:
 		var m: Dictionary = MOVES[mid]
-		parts.append("m:%s=%s/%d/%d/%s" % [mid, str(m.get("strikes", [])), int(m.duration), int(m.damage), str(bool(m.get("unblockable", false)))])
+		parts.append("m:%s=%s/dur=%.2f/dmg=%d/unb=%s/win=%.2f" % [
+			mid, str(m.get("strikes", [])), float(m.duration), int(m.damage),
+			str(bool(m.get("unblockable", false))), float(m.get("window", 0.2))
+		])
 	for eid in ENEMIES:
 		var e: Dictionary = ENEMIES[eid]
-		parts.append("e:%s=%d/%s/%s" % [eid, int(e.hp), str(e.moves), str(e.get("dmg_mul", 1.0))])
+		parts.append("e:%s=%d/%s/mul=%.2f" % [eid, int(e.hp), str(e.moves), float(e.get("dmg_mul", 1.0))])
 	return hash("\n".join(parts))
 var _begin_events: Array = []
 
@@ -100,7 +109,7 @@ func _init() -> void:
 
 func restart() -> void:
 	battle_generation += 1
-	player_hp = PLAYER_MAX_HP
+	player_hp = initial_hp
 	enemy_hp = int(ENEMIES[enemy_id].hp)
 	points = 0
 	attack_index = 0
@@ -188,7 +197,8 @@ func _summon_card() -> Array:
 	if hand.size() >= HAND_SIZE:
 		events.append({"type": "summon_rejected", "reason": "hand_full"})
 		return events
-	if points < SUMMON_COST:
+	var scost := SUMMON_COST - (1 if perfect_charge else 0)
+	if points < scost:
 		events.append({"type": "summon_rejected", "reason": "points"})
 		return events
 	var pool: Array[String] = []
@@ -197,7 +207,6 @@ func _summon_card() -> Array:
 	if pool.is_empty():
 		events.append({"type": "summon_rejected", "reason": "empty"})
 		return events
-	var scost := SUMMON_COST - (1 if perfect_charge else 0)
 	points -= scost
 	stats.summons = int(stats.get("summons", 0)) + 1
 	stats.points_spent = int(stats.get("points_spent", 0)) + scost
@@ -435,9 +444,22 @@ func _play_card(id: String) -> Array:
 		"佑":
 			stats.you_played = int(stats.get("you_played", 0)) + 1
 	match id:
-		"attack":
-			enemy_hp -= int(data.damage)
-			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
+		"attack", "zhuying", "liebo", "xuezhang", "baiguyin", "shoulian", "yuangui", "tianping":
+			var dmg: int = int(data.get("damage", 5))
+			if id == "xuezhang" and player_hp < PLAYER_MAX_HP:
+				dmg += 6
+			elif id == "shoulian" and enemy_hp < 20:
+				dmg += 8
+			elif id == "baiguyin":
+				force_perfect_next = true
+			enemy_hp -= dmg
+			events.append({"type": "card_played", "id": id, "damage": dmg})
+		"shuangdeng":
+			var dmg: int = int(data.damage)
+			enemy_hp -= dmg
+			var healed := mini(int(data.get("heal", 3)), PLAYER_MAX_HP - player_hp)
+			player_hp += healed
+			events.append({"type": "card_played", "id": id, "damage": dmg, "healed": healed})
 		"shatter":
 			var in_stagger_window := state == BattleState.RESOLVING or stagger_remaining > 0.0
 			var charged := perfect_charge and in_stagger_window
@@ -445,17 +467,25 @@ func _play_card(id: String) -> Array:
 			perfect_charge = false
 			enemy_hp -= total
 			events.append({"type": "card_played", "id": id, "damage": total, "charged": charged})
-		"guard":
-			enemy_hp -= int(data.damage)
-			if state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
+		"guard", "difan", "fuhunsuo", "zhuangzhong":
+			var dmg: int = int(data.get("damage", 0))
+			if dmg > 0:
+				enemy_hp -= dmg
+			var st: float = float(data.get("stagger", 0.0))
+			if id == "guard" and state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
 				_finish_action(events)
 				points = mini(MAX_POINTS, points + 1)
 				events.append({"type": "grab_cancelled", "points": 1})
 				events.append({"type": "points_changed"})
-			elif state == BattleState.WINDUP:
-				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + float(data.stagger))
-				events.append({"type": "stagger", "duration": float(data.stagger)})
-			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
+			elif state == BattleState.WINDUP and st > 0.0:
+				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + st)
+				events.append({"type": "stagger", "duration": st})
+			events.append({"type": "card_played", "id": id, "damage": dmg})
+		"jiedao":
+			if state == BattleState.WINDUP and enemy_id != "lantern_keeper":
+				_finish_action(events)
+				events.append({"type": "action_interrupted"})
+			events.append({"type": "card_played", "id": id, "damage": 0})
 		"duanxiang":
 			current_intent.fake = -1.0
 			fake_released = true
@@ -490,16 +520,26 @@ func _play_card(id: String) -> Array:
 				current_intent.unblockable = false
 				events.append({"type": "cleansed"})
 			events.append({"type": "card_played", "id": id, "damage": 0})
-		"zhuangzhong":
-			enemy_hp -= int(data.damage)
-			if state == BattleState.WINDUP:
-				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + float(data.stagger))
-				events.append({"type": "stagger", "duration": float(data.stagger)})
-			events.append({"type": "card_played", "id": id, "damage": int(data.damage)})
-		"shift":
-			var healed := mini(int(data.heal), PLAYER_MAX_HP - player_hp)
+		"shift", "dengxin", "tianyou", "jieshou":
+			var heal_amt: int = int(data.get("heal", 5))
+			var healed := mini(heal_amt, PLAYER_MAX_HP - player_hp)
 			player_hp += healed
 			events.append({"type": "card_played", "id": id, "healed": healed})
+		"wenlu":
+			if hand.size() < HAND_SIZE and not draw_pile.is_empty():
+				hand.append(draw_pile.pop_back())
+				events.append({"type": "hand_changed"})
+			events.append({"type": "card_played", "id": id, "draw": 1})
+		"zhima":
+			for _i in range(2):
+				if hand.size() < HAND_SIZE and not draw_pile.is_empty():
+					hand.append(draw_pile.pop_back())
+			events.append({"type": "hand_changed"})
+			events.append({"type": "card_played", "id": id, "summon": 2})
+		"changming":
+			var healed := mini(int(data.get("max_hp", 6)), PLAYER_MAX_HP - player_hp)
+			player_hp += healed
+			events.append({"type": "card_played", "id": id, "max_hp": 6})
 	hand.erase(id)
 	discard_pile.append(id)
 	if enemy_hp <= 0:

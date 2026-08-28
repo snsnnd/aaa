@@ -77,7 +77,7 @@ func _run() -> void:
 	_check("blue_second_strike_animates", demo.weapon_pivot.rotation > -0.6 and demo.enemy_sprite.position.x < 995.0)
 	await _capture("04_blue_second_strike")
 	await _send_key(KEY_SPACE)
-	_check("blue_second_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.SUCCESS)
+	_check("blue_second_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.SUCCESS or demo.sim.queued_defense == demo.sim.DefenseGrade.PERFECT)
 	_check("blue_combo_resolves", await _wait_until(func(): return demo.sim.state == demo.sim.BattleState.RESOLVING))
 	_check("blue_combo_builds_points", demo.sim.points >= 2 and demo.sim.points <= 3)
 

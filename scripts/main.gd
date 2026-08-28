@@ -327,7 +327,7 @@ func _present_impact(event: Dictionary) -> void:
 		BattleSimulationScript.DefenseGrade.PERFECT:
 			view.perfect_impact_fx()
 			hud.flash(Color(1.0, 0.88, 0.56), 0.68, 0.18)
-			hud.show_message("完美接刀｜还愿 +2", Color("f2d487"), 0.8)
+			hud.show_message("完美接刀｜还愿 +1 · 乘势", Color("f2d487"), 0.8)
 		_:
 			view.take_hit(int(event.damage))
 			hud.flash(Color(0.75, 0.08, 0.08), 0.30, 0.22)

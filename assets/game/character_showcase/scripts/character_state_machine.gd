@@ -98,33 +98,41 @@ func _enter_state(state: State, _from: State) -> void:
 		return
 	match state:
 		State.IDLE:
-			_character_view.on_enter_idle()
+			if _character_view.has_method("on_enter_idle"):
+				_character_view.on_enter_idle()
 		State.PHASE_RAISE:
-			_character_view.on_enter_raise()
+			if _character_view.has_method("on_enter_raise"):
+				_character_view.on_enter_raise()
 		State.PHASE_HOLD:
-			_character_view.on_enter_hold()
+			if _character_view.has_method("on_enter_hold"):
+				_character_view.on_enter_hold()
 		State.PHASE_COMMIT:
-			_character_view.on_enter_commit()
+			if _character_view.has_method("on_enter_commit"):
+				_character_view.on_enter_commit()
 		State.PHASE_RECOVER:
-			_character_view.on_enter_recover()
+			if _character_view.has_method("on_enter_recover"):
+				_character_view.on_enter_recover()
 		State.HIT:
-			_character_view.on_enter_hit()
+			if _character_view.has_method("on_enter_hit"):
+				_character_view.on_enter_hit()
 		State.STAGGER:
-			_character_view.on_enter_stagger()
+			if _character_view.has_method("on_enter_stagger"):
+				_character_view.on_enter_stagger()
 		State.DEATH:
-			_character_view.on_enter_death()
+			if _character_view.has_method("on_enter_death"):
+				_character_view.on_enter_death()
 
 
 func _exit_state(state: State) -> void:
 	if _character_view == null:
 		return
-	match state:
-		State.PHASE_RAISE, State.PHASE_HOLD, State.PHASE_COMMIT, State.HIT, State.STAGGER:
-			_character_view.on_exit_action()
+	if _character_view.has_method("on_exit_action"):
+		_character_view.on_exit_action()
 
 
 func _update_state(state: State, delta: float) -> void:
 	if _character_view == null:
 		return
 	if state == State.IDLE or state == State.STAGGER or state == State.PHASE_HOLD:
-		_character_view.update_idle_physics(delta, state == State.STAGGER or state == State.PHASE_HOLD)
+		if _character_view.has_method("update_idle_physics"):
+			_character_view.update_idle_physics(delta, state == State.STAGGER or state == State.PHASE_HOLD)

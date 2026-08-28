@@ -17,7 +17,11 @@ const BattleScene := preload("res://scenes/main.tscn")
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 const BASE_DECK := ["attack", "attack", "shatter", "guard", "shift"]
-const DRAFT_POOL := ["attack", "shatter", "guard", "shift", "duannian", "dengxin", "zhuangzhong", "anhun"]
+const DRAFT_POOL := [
+	"attack", "shatter", "duannian", "zhuangzhong", "zhuying", "liebo", "xuezhang", "baiguyin", "shoulian", "shuangdeng", "yuangui", "tianping",
+	"guard", "difan", "jieshi", "tongjing", "fuhunsuo", "jiedao", "jinshen", "podan", "duanxiang",
+	"shift", "dengxin", "tianyou", "wenlu", "zhima", "changming", "jieshou", "anhun", "tinggeng",
+]
 const NODE_TABLE := [
 	["battle", "lantern_imp"], ["event", "paper_clue"], ["battle", "paper_apprentice"],
 	["rest", ""], ["battle", "patrol_corpse"], ["elite", "mortuary_warden"],

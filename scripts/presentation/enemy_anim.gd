@@ -22,6 +22,7 @@ func setup(state: FxState) -> void:
 	fx = state
 	state_machine = CharacterStateMachineScript.new()
 	add_child(state_machine)
+	state_machine.setup(self)
 	_load_profile()
 	enemy_sprite = Sprite2D.new()
 	enemy_sprite.position = Vector2(1006, 350)

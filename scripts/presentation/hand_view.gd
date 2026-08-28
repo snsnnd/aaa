@@ -162,9 +162,9 @@ func _on_card_hovered(slot: int) -> void:
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(button, "scale", Vector2(1.28, 1.28), 0.16)
 		tw.tween_property(button, "position:y", -24.0, 0.16)
-		# 谋定后动 (Tactical Bullet Time): 战术时空减速至 0.2x，从容阅读卡牌
+		# 谋定后动 (Tactical Focus): 战术时空减速至 0.65x，从容阅读卡牌且防弹反作弊
 		if Engine.time_scale >= 0.95:
-			Engine.time_scale = 0.20
+			Engine.time_scale = 0.65
 
 
 func _on_card_unhovered(slot: int) -> void:
@@ -176,13 +176,13 @@ func _on_card_unhovered(slot: int) -> void:
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		tw.tween_property(button, "scale", Vector2.ONE, 0.18)
 		tw.tween_property(button, "position:y", 12.0, 0.18)
-		# 恢复正常时间流速
-		if _hovered_slot == -1 and Engine.time_scale <= 0.25:
+		# 恢复正常时间流速 (0.65 -> 1.0)
+		if _hovered_slot == -1 and absf(Engine.time_scale - 0.65) < 0.05:
 			Engine.time_scale = 1.0
 
 
 func _on_slot_pressed(slot: int) -> void:
-	if Engine.time_scale <= 0.25:
+	if absf(Engine.time_scale - 0.65) < 0.05:
 		Engine.time_scale = 1.0
 	if slot >= 0 and slot < sim.hand.size():
 		command.call({"type": "play_card", "id": sim.hand[slot]})
