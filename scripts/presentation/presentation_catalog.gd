@@ -63,6 +63,37 @@ const MOVE_PRESENTATION := {
 	"quick": {"color": Color("d0a45c")},
 }
 
+const MOVE_ANIMATIONS := {
+	"red": {
+		"type": "delayed_strike",
+		"raise_end": 0.36, "hold_end": 0.82,
+		"weapon_rot": [-0.45, -2.25, 1.40],
+		"body_x": [1006.0, 1020.0, 580.0],
+		"body_rot": [0.0, 0.04, -0.16]
+	},
+	"blue": {
+		"type": "combo_strikes",
+		"raise_end": 0.58,
+		"weapon_rot": [-0.45, -1.75, 1.25],
+		"body_x": [1006.0, 1015.0, 560.0],
+		"body_rot": [0.0, 0.02, -0.12]
+	},
+	"quick": {
+		"type": "combo_strikes",
+		"raise_end": 0.65,
+		"weapon_rot": [-0.45, -1.60, 1.20],
+		"body_x": [1006.0, 1010.0, 580.0],
+		"body_rot": [0.0, 0.02, -0.10]
+	},
+	"green": {
+		"type": "grab_reach",
+		"cancel_point": 0.60,
+		"weapon_rot": [-0.45, -2.02, -0.20],
+		"body_x": [1006.0, 760.0],
+		"hand_reach": Vector2(-540, -18)
+	}
+}
+
 const ENEMY_PRESENTATION := {
 	"watchman": {"texture": "res://assets/demo/enemy_watchman.png"},
 	"lantern_imp": {"texture": "res://assets/game/enemies/lantern_imp.png"},

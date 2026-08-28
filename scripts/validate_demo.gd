@@ -73,7 +73,7 @@ func _run() -> void:
 	_check("blue_first_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.PERFECT)
 	_check("blue_first_impact_resolves", await _wait_until(func(): return demo.sim.attack_index == 1 and demo.sim.strike_index == 1))
 	_check("perfect_defense_grants_point_and_rage", demo.sim.points >= 1 and demo.sim.points <= 2 and demo.sim.rage >= 1)
-	_check("blue_second_window_reached", await _wait_for_attack(1, 1.40))
+	_check("blue_second_window_reached", await _wait_for_attack(1, 1.36))
 	_check("blue_second_strike_animates", demo.weapon_pivot.rotation > -0.6 and demo.enemy_sprite.position.x < 995.0)
 	await _capture("04_blue_second_strike")
 	await _send_key(KEY_SPACE)

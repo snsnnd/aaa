@@ -234,87 +234,99 @@ func _sync_phase(s) -> void:
 
 func _update_attack_visuals() -> void:
 	var s := sim()
+	var mid := String(s.current_intent.id)
+	var anim_cfg: Dictionary = PresentationCatalog.MOVE_ANIMATIONS.get(mid, PresentationCatalog.MOVE_ANIMATIONS["red"])
 	var duration: float = s.current_intent.duration
 	var ratio := clampf(s.attack_elapsed / duration, 0.0, 1.0)
-	match String(s.current_intent.id):
-		"red":
-			_red_slow_blade(ratio)
-		"blue", "quick":
-			_strike_combo(ratio)
-		"green":
-			_green_grab(ratio)
+	
+	match String(anim_cfg.get("type", "delayed_strike")):
+		"delayed_strike":
+			_eval_delayed_strike(anim_cfg, ratio)
+		"combo_strikes":
+			_eval_combo_strikes(anim_cfg, ratio)
+		"grab_reach":
+			_eval_grab_reach(anim_cfg, ratio)
 
 
-func _red_slow_blade(ratio: float) -> void:
-	# 慢刀快出公式 (Sekiro Delayed Strike Curve):
-	# 0.0 ~ 0.88 (0~2.46s): 极长的高举蓄势与停顿，身体稳稳站在后方 (x=1006)
-	# 0.88 ~ 1.0 (2.46~2.80s, 340ms): 极速前冲突刺下劈！刀刃以极高速度撕裂空气砸向玩家身前接触点 (x=474)！
-	if ratio < 0.36:
-		var raise := smoothstep(0.0, 0.36, ratio)
-		weapon_pivot.rotation = lerpf(-0.45, -2.25, raise)
-		enemy_sprite.position.x = lerpf(1006.0, 1020.0, raise)
-		enemy_sprite.rotation = lerpf(0.0, 0.04, raise)
-	elif ratio < 0.88:
-		# 极度稳定的高举慢刀停顿
-		var hold := (ratio - 0.36) / 0.52
-		weapon_pivot.rotation = -2.25 + sin(hold * PI * 8.0) * 0.015
-		enemy_sprite.position.x = 1020.0 + sin(hold * PI * 6.0) * 1.0
-		enemy_sprite.rotation = 0.04 + sin(hold * PI * 6.0) * 0.003
+func _eval_delayed_strike(cfg: Dictionary, ratio: float) -> void:
+	var r_end: float = float(cfg.get("raise_end", 0.36))
+	var h_end: float = float(cfg.get("hold_end", 0.82))
+	var w_rots: Array = cfg.get("weapon_rot", [-0.45, -2.25, 1.40])
+	var b_xs: Array = cfg.get("body_x", [1006.0, 1020.0, 580.0])
+	var b_rots: Array = cfg.get("body_rot", [0.0, 0.04, -0.16])
+	
+	if ratio < r_end:
+		var raise := smoothstep(0.0, r_end, ratio)
+		weapon_pivot.rotation = lerpf(float(w_rots[0]), float(w_rots[1]), raise)
+		enemy_sprite.position.x = lerpf(float(b_xs[0]), float(b_xs[1]), raise)
+		enemy_sprite.rotation = lerpf(float(b_rots[0]), float(b_rots[1]), raise)
+	elif ratio < h_end:
+		var hold := (ratio - r_end) / (h_end - r_end)
+		weapon_pivot.rotation = float(w_rots[1]) + sin(hold * PI * 8.0) * 0.015
+		enemy_sprite.position.x = float(b_xs[1]) + sin(hold * PI * 6.0) * 1.0
+		enemy_sprite.rotation = float(b_rots[1]) + sin(hold * PI * 6.0) * 0.003
 	else:
-		# 真实落刀爆发冲刺 (最后 340ms 突进，击中玩家接触点)
-		var strike_progress := (ratio - 0.82) / 0.18
+		var strike_progress := (ratio - h_end) / (1.0 - h_end)
 		var snap := ease(clampf(strike_progress, 0.0, 1.0), 0.25)
-		weapon_pivot.rotation = lerpf(-2.25, 1.40, snap)
-		enemy_sprite.position.x = lerpf(1020.0, 580.0, snap)
-		enemy_sprite.rotation = lerpf(0.04, -0.16, snap)
+		weapon_pivot.rotation = lerpf(float(w_rots[1]), float(w_rots[2]), snap)
+		enemy_sprite.position.x = lerpf(float(b_xs[1]), float(b_xs[2]), snap)
+		enemy_sprite.rotation = lerpf(float(b_rots[1]), float(b_rots[2]), snap)
 
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
-func _strike_combo(ratio: float) -> void:
+func _eval_combo_strikes(cfg: Dictionary, _ratio: float) -> void:
 	var s := sim()
 	var strikes: Array = s.current_intent.strikes
 	var idx: int = clampi(s.strike_index, 0, strikes.size() - 1)
 	var strike_time := float(strikes[idx])
 	var start_time := 0.0 if idx == 0 else float(strikes[idx - 1])
-	var phase := clampf((s.attack_elapsed - start_time) / (strike_time - start_time), 0.0, 1.0)
+	var phase := clampf((s.attack_elapsed - start_time) / maxf(0.01, strike_time - start_time), 0.0, 1.0)
 	
-	# 快刀节奏：前 70% 蓄力，后 30% 爆发下劈
-	if phase < 0.70:
-		var raise := smoothstep(0.0, 0.70, phase)
-		weapon_pivot.rotation = lerpf(0.35 if s.strike_index > 0 else -0.45, -1.75, raise)
-		enemy_sprite.position.x = lerpf(1006.0, 1015.0, raise)
-		enemy_sprite.rotation = 0.02
+	var r_end: float = float(cfg.get("raise_end", 0.70))
+	var w_rots: Array = cfg.get("weapon_rot", [-0.45, -1.75, 1.25])
+	var b_xs: Array = cfg.get("body_x", [1006.0, 1015.0, 560.0])
+	var b_rots: Array = cfg.get("body_rot", [0.0, 0.02, -0.12])
+	
+	if phase < r_end:
+		var raise := smoothstep(0.0, r_end, phase)
+		weapon_pivot.rotation = lerpf(0.35 if s.strike_index > 0 else float(w_rots[0]), float(w_rots[1]), raise)
+		enemy_sprite.position.x = lerpf(float(b_xs[0]), float(b_xs[1]), raise)
+		enemy_sprite.rotation = float(b_rots[1])
 	else:
-		var snap := ease((phase - 0.70) / 0.30, 0.3)
-		weapon_pivot.rotation = lerpf(-1.75, 1.25, snap)
-		enemy_sprite.position.x = lerpf(1015.0, 560.0, snap)
-		enemy_sprite.rotation = lerpf(0.02, -0.12, snap)
+		var snap := ease((phase - r_end) / (1.0 - r_end), 0.3)
+		weapon_pivot.rotation = lerpf(float(w_rots[1]), float(w_rots[2]), snap)
+		enemy_sprite.position.x = lerpf(float(b_xs[1]), float(b_xs[2]), snap)
+		enemy_sprite.rotation = lerpf(float(b_rots[1]), float(b_rots[2]), snap)
 		
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
-func _green_grab(ratio: float) -> void:
-	if ratio < 0.42:
-		var fake_raise := smoothstep(0.0, 0.42, ratio)
-		weapon_pivot.rotation = lerpf(-0.45, -2.02, fake_raise)
+func _eval_grab_reach(cfg: Dictionary, ratio: float) -> void:
+	var c_point: float = float(cfg.get("cancel_point", 0.60))
+	var w_rots: Array = cfg.get("weapon_rot", [-0.45, -2.02, -0.20])
+	var b_xs: Array = cfg.get("body_x", [1006.0, 760.0])
+	var reach_vec: Vector2 = cfg.get("hand_reach", Vector2(-540, -18))
+	
+	if ratio < c_point * 0.7:
+		var fake_raise := smoothstep(0.0, c_point * 0.7, ratio)
+		weapon_pivot.rotation = lerpf(float(w_rots[0]), float(w_rots[1]), fake_raise)
 		enemy_sprite.rotation = fake_raise * 0.04
 		ghost_hand.visible = false
-	elif ratio < 0.60:
-		var cancel := smoothstep(0.42, 0.60, ratio)
-		weapon_pivot.rotation = lerpf(-2.02, -0.20, cancel)
+	elif ratio < c_point:
+		var cancel := smoothstep(c_point * 0.7, c_point, ratio)
+		weapon_pivot.rotation = lerpf(float(w_rots[1]), float(w_rots[2]), cancel)
 		enemy_sprite.rotation = lerpf(0.04, -0.02, cancel)
 		ghost_hand.visible = cancel > 0.62
 		ghost_hand.position = enemy_sprite.position + Vector2(-6, -8)
 		ghost_hand.scale = Vector2(0.55, 0.8)
 	else:
-		# 鬼手爆发探出
-		var reach_prog := (ratio - 0.60) / 0.40
+		var reach_prog := (ratio - c_point) / (1.0 - c_point)
 		var snap := ease(reach_prog, 0.4)
-		weapon_pivot.rotation = -0.20
-		enemy_sprite.position.x = lerpf(1006.0, 760.0, snap)
+		weapon_pivot.rotation = float(w_rots[2])
+		enemy_sprite.position.x = lerpf(float(b_xs[0]), float(b_xs[1]), snap)
 		enemy_sprite.rotation = lerpf(-0.02, -0.09, snap)
 		ghost_hand.visible = true
-		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + Vector2(-540, -18), snap)
+		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + reach_vec, snap)
 		ghost_hand.scale = Vector2(lerpf(0.55, 1.3, snap), lerpf(0.8, 1.0, snap))
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
