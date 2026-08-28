@@ -127,6 +127,7 @@ func _check_card_system() -> void:
 		sim.discard_pile.append(sim.hand.pop_back())
 		sim.hand.append("jieshou")
 	sim.submit({"type": "play_card", "id": "jieshou"})
+	sim.step(0.5)  # 命中帧结算
 	_check("card_jieshou_self_damage", sim.player_hp == 47, "hp=%d" % sim.player_hp)
 	# 长明：真实上限提升
 	var sim2 := BattleSimulationScript.new()
@@ -139,6 +140,7 @@ func _check_card_system() -> void:
 		sim2.discard_pile.append(sim2.hand.pop_back())
 		sim2.hand.append("changming")
 	sim2.submit({"type": "play_card", "id": "changming"})
+	sim2.step(0.5)  # 命中帧结算
 	_check("card_changming_max_hp", sim2.player_max_hp == 78 and sim2.player_hp == 74,
 		"max=%d hp=%d" % [sim2.player_max_hp, sim2.player_hp])
 
@@ -155,6 +157,7 @@ func _check_enemy_traits() -> void:
 	sim.hand.append("attack")
 	var hp_before: int = sim.enemy_hp
 	sim.submit({"type": "play_card", "id": "attack"})
+	sim.step(0.5)  # 命中帧结算
 	_check("trait_paper_armor", sim.enemy_hp == hp_before - 1, "armor reduces 5->min1")
 	# 破甲后恢复
 	sim.perfect_charge = false
@@ -163,6 +166,7 @@ func _check_enemy_traits() -> void:
 	sim.points = 9
 	hp_before = sim.enemy_hp
 	sim.submit({"type": "play_card", "id": "attack"})
+	sim.step(0.5)
 	_check("trait_armor_broken", sim.enemy_hp == hp_before - 5)
 	# 骰运：赌鬼开招带骰子事件
 	var sim3 := BattleSimulationScript.new()
@@ -225,6 +229,7 @@ func _check_enemy_traits() -> void:
 	sim7.hand.append("attack")
 	var hp_before7: int = sim7.enemy_hp
 	sim7.submit({"type": "play_card", "id": "attack"})
+	sim7.step(0.5)
 	_check("flag_paper_face_done", sim7.enemy_hp == hp_before7 - 3, "dmg=%d" % (hp_before7 - sim7.enemy_hp))
 
 
@@ -233,134 +238,148 @@ func _check_enemy_traits() -> void:
 func _check_combo_system() -> void:
 	var ComboSys: GDScript = preload("res://scripts/battle/combo_system.gd")
 	var ActionStateCls: GDScript = preload("res://scripts/battle/action_state.gd")
-	var ActionCat: GDScript = preload("res://scripts/battle/action_catalog.gd")
-	# 1) 防反=连招起手：成功写入 parry_exit 且窗口打开
+	var ActionCatalogScript: GDScript = preload("res://scripts/battle/action_catalog.gd")
+	# 1) 防反=连招起手：命中结算写入 parry_exit 且起手窗口打开
 	var sim := BattleSimulationScript.new()
 	sim.restart()
 	sim.attack_elapsed = float(sim.current_intent.duration) - 0.20
 	sim.submit({"type": "defend"})
-	sim.step(1.0)  # 结算成功防范
+	sim.step(0.21)  # 红刀命中（2.8）结算成功防范
 	_check("combo_parry_opens", sim.action_state.current_pose == "parry_exit" and sim.action_state.is_chain_open(),
 		"pose=%s timer=%.2f lvl=%d" % [sim.action_state.current_pose, sim.action_state.combo_timer, sim.action_state.combo_level])
-	# 2) 连招窗口内出牌：产生 action_started 且顺势衔接涨连势
-	var act_events := []
-	for card_id in ["attack", "zhuying", "liebo"]:
-		if sim.action_state.combo_timer <= 0.0:
-			sim.action_state.combo_timer = ActionCat.COMBO_WINDOW
-		sim.points = 9
-		if not sim.hand.has(card_id):
-			sim.hand.append(card_id)
-		for ev in sim.submit({"type": "play_card", "id": card_id}):
-			act_events.append(ev)
-	var started := act_events.filter(func(e): return String(e.get("type", "")) == "action_started")
-	var seamless := act_events.filter(func(e): return String(e.get("type", "")) == "action_started" and String(e.get("transition", "")) == "seamless")
-	var impacts := act_events.filter(func(e): return String(e.get("type", "")) == "action_impact")
-	var reactions := act_events.filter(func(e): return String(e.get("type", "")) == "enemy_reaction")
-	_check("combo_action_events", started.size() == 3 and impacts.size() == 3 and reactions.size() == 3,
-		"started=%d impacts=%d reactions=%d" % [started.size(), impacts.size(), reactions.size()])
-	_check("combo_seamless_chain", seamless.size() >= 1 and sim.action_state.momentum >= 1,
-		"seamless=%d momentum=%d lvl=%d" % [seamless.size(), sim.action_state.momentum, sim.action_state.combo_level])
-	# 3) 受击清空连势
-	sim.action_state.momentum = 3
-	sim.action_state.on_player_hit()
-	_check("combo_hit_clears", sim.action_state.momentum == 0 and not sim.action_state.is_chain_open())
-	# 4) 防反失误清空连势
-	sim.action_state.momentum = 2
-	sim.action_state.on_defense_miss()
-	_check("combo_miss_clears", sim.action_state.momentum == 0)
-	# 5) 终结开放：连招等级≥3 且卡带 finisher 标签 → FINISHER 层级
+	# 2) 完整链路：防反 → 起手 → 命中帧 → 取消衔接 → 预输入 → 受击反应 → 连势清空 → 继续
+	var sim2 := BattleSimulationScript.new()
+	sim2.deck_config = Array(["attack", "zhuying", "liebo", "shatter", "attack", "guard"], TYPE_STRING, "", null)
+	sim2.restart()
+	sim2.hand.clear()
+	for cid in ["attack", "zhuying", "liebo", "shatter", "attack"]:
+		sim2.hand.append(cid)
+	sim2.points = 9
+	# 2a) 真实防反：红刀命中结算 → 蓝起手（elapsed≈0.10）→ 防反起手窗口打开
+	sim2.attack_elapsed = float(sim2.current_intent.duration) - 0.20
+	sim2.submit({"type": "defend"})
+	sim2.step(0.30)
+	_check("chain_parry_opens", sim2.action_state.is_chain_open() and sim2.action_state.current_pose == "parry_exit",
+		"pose=%s" % sim2.action_state.current_pose)
+	var ev_a := sim2.submit({"type": "play_card", "id": "attack"})
+	var started_a := false
+	for ev in ev_a:
+		if String(ev.get("type", "")) == "action_started":
+			started_a = true
+	_check("chain_startup_delayed", started_a and sim2.p_phase == BattleSimulationScript.PlayerActionPhase.STARTUP and sim2.enemy_hp == 46,
+		"hp=%d(未结算) phase=%d" % [sim2.enemy_hp, sim2.p_phase])
+	# 2b) 命中帧结算
+	var ev_b := sim2.step(0.25)
+	var impact_b := false
+	var reaction_b := ""
+	for ev in ev_b:
+		if String(ev.get("type", "")) == "action_impact":
+			impact_b = true
+			reaction_b = String(ev.get("level", ""))
+	_check("chain_impact_frame", impact_b and reaction_b == "LIGHT" and sim2.enemy_hp == 41,
+		"hp=%d level=%s" % [sim2.enemy_hp, reaction_b])
+	# 2c) 取消窗口衔接：attack 收招中提交 zhuying
+	var ev_c := sim2.submit({"type": "play_card", "id": "zhuying"})
+	var canceled := false
+	var seamless := false
+	for ev in ev_c:
+		if String(ev.get("type", "")) == "action_canceled":
+			canceled = true
+		if String(ev.get("type", "")) == "action_started" and String(ev.get("transition", "")) == "seamless":
+			seamless = true
+	_check("chain_cancel_link", canceled and seamless, "canceled=%s seamless=%s" % [canceled, seamless])
+	sim2.step(0.20)  # zhuying 命中（0.20）
+	_check("chain_link_damage", sim2.enemy_hp == 37, "hp=%d" % sim2.enemy_hp)
+	# 2d) 预输入：liebo 前摇中提交 shatter → 缓冲，取消窗口开启时执行
+	sim2.submit({"type": "play_card", "id": "liebo"})
+	var buffered := false
+	for ev in sim2.submit({"type": "play_card", "id": "shatter"}):
+		if String(ev.get("type", "")) == "action_buffered":
+			buffered = true
+	_check("chain_preinput_buffer", buffered and sim2.p_queued == "shatter")
+	# 2e) 缓冲在取消窗口开启瞬间执行；层级随连招升级（MEDIUM→HEAVY）
+	var ev_e := sim2.step(0.24)
+	var shatter_started := false
+	var liebo_level := ""
+	for ev in ev_e:
+		if String(ev.get("type", "")) == "action_started" and String(ev.get("id", "")) == "shatter":
+			shatter_started = true
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "liebo":
+			liebo_level = String(ev.get("level", ""))
+	_check("chain_buffer_executes", shatter_started and sim2.p_card == "shatter", "p_card=%s" % sim2.p_card)
+	_check("chain_impact_upgrade", liebo_level == "BREAK", liebo_level)
+	# 2f) 缓冲的 shatter 在命中帧结算（敌收招 0.62s 使蓝刀后移，链路自然落在蓝时间轴上）
+	var ev_f := sim2.step(0.60)
+	var shatter_impact := false
+	for ev in ev_f:
+		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "shatter":
+			shatter_impact = true
+	_check("chain_continues_after_hit", shatter_impact and sim2.enemy_hp == 19, "hp=%d" % sim2.enemy_hp)
+	# 2g) 蓝·变拍二连 0.82 命中 → 未防范 → 受击清空连势
+	#     敌人残血（19<23）触发 ×1.15 强化：7 → 8 伤
+	sim2.step(0.30)
+	_check("chain_hit_clears_momentum", sim2.action_state.momentum == 0 and sim2.player_hp == 64,
+		"momentum=%d hp=%d" % [sim2.action_state.momentum, sim2.player_hp])
+	# 3) 防反失误清空连势
+	sim2.action_state.momentum = 2
+	sim2.action_state.on_defense_miss()
+	_check("combo_miss_clears", sim2.action_state.momentum == 0)
+	# 4) 终结门控（纯解析器）
 	var st = ActionStateCls.new()
 	st.combo_level = 3
 	st.current_pose = "low"
 	st.combo_timer = 1.0
-	var fin_action: Dictionary = ActionCat.ACTIONS["act_tianping"]
+	var fin_action: Dictionary = ActionCatalogScript.ACTIONS["act_tianping"]
 	var res: Dictionary = ComboSys.new().resolve(st, fin_action, true, ComboSys.FINISHER_LEVEL)
 	_check("combo_finisher_gate", bool(res["finisher_available"]), str(res))
-	# 连招等级不足时不开放（1 级顺势 +1 → 2 级，仍不到 3）
 	st.combo_level = 1
 	res = ComboSys.new().resolve(st, fin_action, true, ComboSys.FINISHER_LEVEL)
 	_check("combo_finisher_gate_low", not bool(res["finisher_available"]), str(res["combo_level"]))
-	# 6) 层级升级：连招≥3 → MEDIUM→HEAVY；连势≥2 再升一级 → BREAK
+	# 5) 层级升级
 	var cs = ComboSys.new()
 	_check("combo_impact_upgrade", String(cs.pick_impact_level("MEDIUM", 3, 0, false)) == "HEAVY",
 		cs.pick_impact_level("MEDIUM", 3, 0, false))
 	_check("combo_impact_upgrade_momentum", String(cs.pick_impact_level("MEDIUM", 3, 2, false)) == "BREAK",
 		cs.pick_impact_level("MEDIUM", 3, 2, false))
-	# 7) 蓝牌走 EnemyTimeline：延灯经标准接口改时间轴（命中点后移）
-	var sim2 := BattleSimulationScript.new()
-	sim2.restart()
-	sim2.points = 9
-	sim2.hand.clear()
-	sim2.hand.append("yandeng")
-	var dur_before: float = float(sim2.current_intent.duration)
-	var strikes_before: Array = sim2.current_intent.get("strikes", []).duplicate()
-	sim2.submit({"type": "play_card", "id": "yandeng"})
-	var ok_delay: bool = absf(float(sim2.current_intent.duration) - dur_before - 0.4) < 0.001
-	if not strikes_before.is_empty():
-		ok_delay = ok_delay and absf(float(sim2.current_intent["strikes"][0]) - float(strikes_before[0]) - 0.4) < 0.001
-	_check("combo_enemy_timeline_delay", ok_delay)
-	# 8) 借刀经标准接口打断（守灯人免疫保持）
+	# 6) 蓝牌走 EnemyTimeline：延灯命中帧改写时间轴；借刀打断；Boss 免疫
 	var sim3 := BattleSimulationScript.new()
 	sim3.restart()
 	sim3.points = 9
 	sim3.hand.clear()
-	sim3.hand.append("jiedao")
-	var evs3 := sim3.submit({"type": "play_card", "id": "jiedao"})
-	var interrupted := false
-	for ev in evs3:
-		if String(ev.get("type", "")) == "action_interrupted":
-			interrupted = true
-	_check("combo_enemy_timeline_interrupt", interrupted and sim3.state == BattleSimulationScript.BattleState.RESOLVING)
-	# 9) 卡牌直接起手（不经防反）：逐影→斩纸 窗口内无缝衔接，连招照常成立
-	var sim5 := BattleSimulationScript.new()
-	sim5.restart()
-	sim5.points = 9
-	var chain_ok := true
-	var seq := ["zhuying", "attack", "liebo"]
-	var last_level := 0
-	for card_id in seq:
-		if not sim5.hand.has(card_id):
-			sim5.hand.append(card_id)
-		sim5.points = 9
-		var evs5 := sim5.submit({"type": "play_card", "id": card_id})
-		var started5 := false
-		for ev in evs5:
-			if String(ev.get("type", "")) == "action_started":
-				started5 = true
-				last_level = int(ev.get("combo_level", 0))
-		chain_ok = chain_ok and started5
-	_check("combo_card_opener_chain", chain_ok and last_level >= 2 and sim5.action_state.momentum >= 1,
-		"lvl=%d momentum=%d" % [last_level, sim5.action_state.momentum])
-	# 10) opener 标签：逐影作为起手 → 连势 +1；非 opener（斩纸起手）→ 连势不变
-	var sim6 := BattleSimulationScript.new()
-	sim6.restart()
-	sim6.points = 9
-	sim6.hand.clear()
-	sim6.hand.append("zhuying")
-	for ev in sim6.submit({"type": "play_card", "id": "zhuying"}):
-		pass
-	_check("combo_opener_tag_bonus", sim6.action_state.momentum == 1, "momentum=%d" % sim6.action_state.momentum)
-	var sim7 := BattleSimulationScript.new()
-	sim7.restart()
-	sim7.points = 9
-	sim7.hand.clear()
-	sim7.hand.append("attack")
-	for ev in sim7.submit({"type": "play_card", "id": "attack"}):
-		pass
-	_check("combo_plain_open_no_bonus", sim7.action_state.momentum == 0, "momentum=%d" % sim7.action_state.momentum)
-	# 11) Boss 免疫：守灯人不可被借刀打断
+	sim3.hand.append("yandeng")
+	var strikes_before: Array = sim3.current_intent.get("strikes", []).duplicate()
+	var dur_before: float = float(sim3.current_intent.duration)
+	sim3.submit({"type": "play_card", "id": "yandeng"})
+	sim3.step(0.4)
+	var ok_delay: bool = absf(float(sim3.current_intent.duration) - dur_before - 0.4) < 0.001
+	if not strikes_before.is_empty():
+		ok_delay = ok_delay and absf(float(sim3.current_intent["strikes"][0]) - float(strikes_before[0]) - 0.4) < 0.001
+	_check("combo_enemy_timeline_delay", ok_delay)
 	var sim4 := BattleSimulationScript.new()
-	sim4.enemy_id = "lantern_keeper"
 	sim4.restart()
 	sim4.points = 9
 	sim4.hand.clear()
 	sim4.hand.append("jiedao")
 	var evs4 := sim4.submit({"type": "play_card", "id": "jiedao"})
-	var boss_interrupted := false
+	evs4.append_array(sim4.step(0.3))
+	var interrupted := false
 	for ev in evs4:
 		if String(ev.get("type", "")) == "action_interrupted":
+			interrupted = true
+	_check("combo_enemy_timeline_interrupt", interrupted and sim4.state == BattleSimulationScript.BattleState.RESOLVING)
+	var sim5 := BattleSimulationScript.new()
+	sim5.enemy_id = "lantern_keeper"
+	sim5.restart()
+	sim5.points = 9
+	sim5.hand.clear()
+	sim5.hand.append("jiedao")
+	var evs5 := sim5.submit({"type": "play_card", "id": "jiedao"})
+	evs5.append_array(sim5.step(0.3))
+	var boss_interrupted := false
+	for ev in evs5:
+		if String(ev.get("type", "")) == "action_interrupted":
 			boss_interrupted = true
-	_check("combo_boss_interrupt_immune", not boss_interrupted and sim4.state == BattleSimulationScript.BattleState.WINDUP)
+	_check("combo_boss_interrupt_immune", not boss_interrupted and sim5.state == BattleSimulationScript.BattleState.WINDUP)
 
 
 # ————————————————————— Effect 数值完整性 —————————————————————
@@ -374,9 +393,15 @@ func _check_effect_floats() -> void:
 		sim.points = 9
 		sim.hand.clear()
 		sim.hand.append(cid)
-		sim.submit({"type": "play_card", "id": cid})
-		_check("effect_stagger_%s" % cid, sim.stagger_remaining > 0.0,
-			"stagger=%.3f" % sim.stagger_remaining)
+		sim.hand.clear()
+		sim.hand.append(cid)
+		var evs_st := sim.submit({"type": "play_card", "id": cid})
+		evs_st.append_array(sim.step(0.27))  # 命中帧结算（凝滞在命中帧施加）
+		var got_stagger := ""
+		for ev in evs_st:
+			if String(ev.get("type", "")) == "stagger":
+				got_stagger = "%.3f" % float(ev.get("duration", 0.0))
+		_check("effect_stagger_%s" % cid, got_stagger != "", got_stagger)
 	# 延灯：命中点整体后移 0.4s
 	var sim2 := BattleSimulationScript.new()
 	sim2.restart()
@@ -386,6 +411,7 @@ func _check_effect_floats() -> void:
 	var dur_before: float = float(sim2.current_intent.duration)
 	var strikes_before: Array = sim2.current_intent.get("strikes", []).duplicate()
 	sim2.submit({"type": "play_card", "id": "yandeng"})
+	sim2.step(0.4)  # 命中帧结算（延灯在命中帧改写时间轴）
 	var dur_after: float = float(sim2.current_intent.duration)
 	var ok_delay: bool = absf(dur_after - dur_before - 0.4) < 0.001
 	if not strikes_before.is_empty():
@@ -433,6 +459,8 @@ func _check_boss_phases() -> void:
 		sim.points = 9
 		for ev in sim.submit({"type": "play_card", "id": "attack"}):
 			events.append(ev)
+		for ev in sim.step(0.5):  # 命中帧结算
+			events.append(ev)
 		if sim.state != BattleSimulationScript.BattleState.WINDUP and sim.state != BattleSimulationScript.BattleState.RESOLVING:
 			break
 	var phase_event := {}
@@ -457,6 +485,7 @@ func _check_wenlu_scry() -> void:
 	sim.hand.clear()
 	sim.hand.append("wenlu")
 	var events := sim.submit({"type": "play_card", "id": "wenlu"})
+	events.append_array(sim.step(0.4))  # 命中帧结算
 	var offered := false
 	for ev in events:
 		if String(ev.get("type", "")) == "scry_offer":

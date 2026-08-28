@@ -15,6 +15,11 @@ const EnemyTimelineScript := preload("res://scripts/battle/enemy_timeline.gd")
 
 enum BattleState { WINDUP, RESOLVING, VICTORY, DEFEAT }
 enum DefenseGrade { NONE, SUCCESS, PERFECT }
+## 玩家动作执行阶段：STARTUP(前摇) → CANCEL(命中后至收招结束=取消窗口) → IDLE
+enum PlayerActionPhase { IDLE, STARTUP, CANCEL }
+
+const PARRY_WINDOW := 0.7        # 防反起手窗口（秒）：防反后多久内出牌算从防反姿态衔接
+const PARRY_WINDOW_PERFECT := 1.0
 
 const PERFECT_WINDOW := 0.09
 const SUCCESS_GRACE := 0.05
@@ -80,6 +85,13 @@ var ai: EnemyAIScript
 var action_state: ActionStateScript
 var combo_system: ComboSystemScript
 var enemy_timeline: EnemyTimelineScript
+## 动作执行状态机：卡牌不再瞬时结算，而是沿 start→impact→recovery 时间轴推进。
+var p_phase: PlayerActionPhase = PlayerActionPhase.IDLE
+var p_card := ""                # 正在执行的动作对应卡牌
+var p_action := {}              # 动作定义（含 startup/impact_time/recovery/cancel_window）
+var p_combo := {}               # 本次动作的 ComboResult
+var p_elapsed := 0.0
+var p_queued := ""              # 预输入缓冲（单槽，后输入覆盖先输入）
 ## 局外修饰：遗物 mods + 难度修饰 + 反应辅助。由 RunFlow/apply_run_config 写入。
 var run_mods: Dictionary = {}
 ## 剧情旗标（RunState.flags 的只读投影）。
@@ -170,6 +182,12 @@ func restart(hp: int = -1) -> void:
 	_next_window_bonus = 0.0
 	scry_options.clear()
 	action_state.reset()
+	p_phase = PlayerActionPhase.IDLE
+	p_card = ""
+	p_action = {}
+	p_combo = {}
+	p_elapsed = 0.0
+	p_queued = ""
 	_reset_stats()
 	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
@@ -313,9 +331,11 @@ func step(delta: float) -> Array:
 		defense_cooldown = maxf(0.0, defense_cooldown - delta)
 		if defense_cooldown == 0.0:
 			events.append({"type": "cooldown_expired"})
-	# 连招窗口推进：窗口关闭 = 停顿过久，连势软衰减并重置连段
-	if action_state.tick(delta):
+	# 连招窗口推进：仅防反起手窗口（IDLE 时）；动作执行中由动作时间轴接管
+	if p_phase == PlayerActionPhase.IDLE and action_state.tick(delta):
 		events.append({"type": "combo_reset", "momentum": action_state.momentum})
+	# 玩家动作时间轴（与敌人时间轴并行推进）
+	_step_player_action(delta, events)
 	match state:
 		BattleState.WINDUP:
 			_step_windup(delta, events)
@@ -328,6 +348,166 @@ func step(delta: float) -> Array:
 				_begin_events.clear()
 				events.append({"type": "attack_started", "intent": current_intent.id})
 	return events
+
+
+## —— 动作执行状态机 ——————————————————————————
+
+## 取消窗口起点：命中后即可取消，但不得早于"收招末段 - cancel_window"。
+func _cancel_start() -> float:
+	if p_action.is_empty():
+		return 0.0
+	return maxf(float(p_action.get("impact_time", 0.2)), float(p_action.get("recovery", 0.3)) - float(p_action.get("cancel_window", 0.0)))
+
+
+func _in_cancel_window() -> bool:
+	return p_phase == PlayerActionPhase.CANCEL and p_elapsed >= _cancel_start() and p_elapsed < float(p_action.get("recovery", 0.3))
+
+
+func _step_player_action(delta: float, events: Array) -> void:
+	match p_phase:
+		PlayerActionPhase.IDLE:
+			return
+		PlayerActionPhase.STARTUP:
+			p_elapsed += delta
+			if p_elapsed >= float(p_action.get("impact_time", 0.2)):
+				p_phase = PlayerActionPhase.CANCEL
+				_resolve_action_impact(events)
+				# 预输入在取消窗口开启瞬间执行（命中确认取消）
+				_try_execute_queued(events)
+		PlayerActionPhase.CANCEL:
+			p_elapsed += delta
+			if p_elapsed >= float(p_action.get("recovery", 0.3)):
+				_finish_player_action(events)
+
+
+## 提交卡牌：IDLE 直接起手；取消窗口内=取消衔接；其余阶段进入预输入缓冲。
+func _play_card(id: String) -> Array:
+	var events: Array = []
+	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
+		events.append({"type": "card_rejected", "id": id, "reason": "ended"})
+		return events
+	if not scry_options.is_empty():
+		events.append({"type": "card_rejected", "id": id, "reason": "scrying"})
+		return events
+	if not hand.has(id):
+		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
+		return events
+	# 状态归一化：把已到期但未落账的命中/收招先处理掉（零步长刷新）
+	_step_player_action(0.0, events)
+	if p_phase != PlayerActionPhase.IDLE:
+		if _in_cancel_window():
+			_start_player_action(id, events)
+		else:
+			# 预输入：前摇/收招中提交的下一张牌存入缓冲（单槽，后输入覆盖），取消窗口开启时执行
+			if p_queued != id:
+				p_queued = id
+				events.append({"type": "action_buffered", "id": id})
+	else:
+		_start_player_action(id, events)
+	return events
+
+
+## 动作起手：扣费、连招解析、进入 STARTUP。效果延迟到命中帧结算。
+func _start_player_action(id: String, events: Array) -> void:
+	var def: Dictionary = CardSystemScript.effective_def(id)
+	var cost := int(def.cost)
+	if _cards_played == 0 and bool(_mod("first_card_free", false)):
+		cost = 0
+	if points < cost:
+		events.append({"type": "card_rejected", "id": id, "reason": "points"})
+		return
+	var was_canceling := p_phase == PlayerActionPhase.CANCEL
+	if was_canceling:
+		events.append({"type": "action_canceled", "from": p_card, "by": id})
+	p_queued = ""
+	points -= cost
+	stats.points_spent = int(stats.get("points_spent", 0)) + cost
+	stats.cards_played = _cards_played + 1
+	_cards_played += 1
+	match String(def["class"]):
+		"斩":
+			stats.zhan_played = int(stats.get("zhan_played", 0)) + 1
+		"御":
+			stats.yu_played = int(stats.get("yu_played", 0)) + 1
+		"佑":
+			stats.you_played = int(stats.get("you_played", 0)) + 1
+	# —— 连招解析：防反起手窗口 / 上一动作取消窗口 决定衔接 ——
+	var action_def: Dictionary = ActionCatalogScript.action_for(String(def.get("id", id)), String(def["class"]))
+	var chain_open := was_canceling or (p_phase == PlayerActionPhase.IDLE and action_state.is_chain_open())
+	var combo_result: Dictionary = combo_system.resolve(action_state, action_def, chain_open, ComboSystemScript.FINISHER_LEVEL)
+	p_card = id
+	p_action = action_def
+	p_combo = combo_result
+	p_elapsed = 0.0
+	p_phase = PlayerActionPhase.STARTUP
+	action_state.current_action = String(action_def["id"])
+	action_state.combo_level = int(combo_result["combo_level"])
+	action_state.combo_timer = 0.0
+	action_state.can_cancel = false
+	action_state.active_tags.assign(action_def.get("combo_tags", []))
+	if String(combo_result["transition"]) == ComboSystemScript.SEAMLESS or bool(combo_result.get("opener", false)):
+		action_state.momentum = mini(5, action_state.momentum + 1)
+		events.append({"type": "momentum_changed", "value": action_state.momentum})
+	hand.erase(id)
+	discard_pile.append(id)
+	events.append({
+		"type": "action_started", "id": id, "action": String(action_def["id"]),
+		"transition": String(combo_result["transition"]),
+		"combo_level": int(combo_result["combo_level"]),
+		"momentum": action_state.momentum,
+		"vfx_tier": int(combo_result["vfx_tier"]),
+		"movement": String(action_def.get("movement", "none")),
+		"startup": float(action_def.get("startup", 0.1)),
+		"impact_time": float(action_def.get("impact_time", 0.2)),
+		"recovery": float(action_def.get("recovery", 0.3)),
+		"canceled": was_canceling,
+	})
+
+
+## 命中帧结算：效果在此刻才生效（伤害/治疗/凝滞/时间轴改写……）。
+func _resolve_action_impact(events: Array) -> void:
+	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
+		_finish_player_action(events)
+		return
+	var enemy_hp_before := enemy_hp
+	for eff: Dictionary in CardSystemScript.effects_of(p_card):
+		_apply_effect(eff, p_card, events)
+	action_state.current_pose = String(p_action.get("exit_pose", "neutral"))
+	action_state.can_cancel = true
+	# 敌人受击层级：由动作属性+连势计算，卡牌不直接控制敌人动画
+	var dealt := enemy_hp_before - enemy_hp
+	if dealt > 0:
+		var level: String = combo_system.pick_impact_level(
+			String(p_action.get("impact_level", "LIGHT")),
+			action_state.combo_level, action_state.momentum,
+			p_action.get("combo_tags", []).has("finisher"))
+		events.append({"type": "action_impact", "id": p_card, "level": level, "damage": dealt,
+			"finisher": level == "FINISHER", "vfx_tier": int(p_combo.get("vfx_tier", 0))})
+		events.append({"type": "enemy_reaction", "level": level})
+
+
+func _try_execute_queued(events: Array) -> void:
+	if p_queued == "" or state == BattleState.VICTORY or state == BattleState.DEFEAT:
+		p_queued = ""
+		return
+	var id := p_queued
+	p_queued = ""
+	if hand.has(id):
+		_start_player_action(id, events)
+	else:
+		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
+
+
+func _finish_player_action(events: Array) -> void:
+	if p_phase == PlayerActionPhase.IDLE:
+		return
+	events.append({"type": "action_finished", "id": p_card, "recovery_mul": float(p_combo.get("recovery_mul", 1.0))})
+	p_phase = PlayerActionPhase.IDLE
+	p_card = ""
+	p_action = {}
+	p_combo = {}
+	p_elapsed = 0.0
+	action_state.can_cancel = false
 
 
 func _step_windup(delta: float, events: Array) -> void:
@@ -410,9 +590,6 @@ func _attempt_defense() -> Array:
 		action_state.on_defense_miss()
 		events.append({"type": "defense_miss"})
 		return events
-	# 防反 = 连招起手：成功写入 parry_exit 姿态并打开连招窗口；完美提供更强起势与连势
-	var chain_info: Dictionary = action_state.on_defense(queued_defense, ActionCatalogScript.COMBO_WINDOW)
-	events.append({"type": "combo_opened", "perfect": chain_info["perfect"], "combo_level": chain_info["combo_level"], "momentum": chain_info["momentum"]})
 	events.append({"type": "defense_queued", "grade": queued_defense})
 	return events
 
@@ -462,6 +639,10 @@ func _resolve_impact(events: Array) -> void:
 	stats.defends = int(stats.get("defends", 0)) + 1
 	match grade:
 		DefenseGrade.SUCCESS:
+			# 防反 = 连招起手：命中结算此刻写入 parry_exit 姿态并打开起手窗口
+			var parry_window := PARRY_WINDOW_PERFECT if grade == DefenseGrade.PERFECT else PARRY_WINDOW
+			var chain_info: Dictionary = action_state.on_defense(grade, parry_window)
+			events.append({"type": "combo_opened", "perfect": chain_info["perfect"], "combo_level": chain_info["combo_level"], "momentum": chain_info["momentum"]})
 			if mirror_charges > 0:
 				mirror_charges -= 1
 				_damage_enemy(3, events, false)
@@ -471,6 +652,10 @@ func _resolve_impact(events: Array) -> void:
 			events.append({"type": "impact", "grade": grade, "points": 1})
 			events.append({"type": "points_changed"})
 		DefenseGrade.PERFECT:
+			# 完美防反：更强起势（+2 级）与连势
+			var parry_window_p := PARRY_WINDOW_PERFECT
+			var chain_info_p: Dictionary = action_state.on_defense(grade, parry_window_p)
+			events.append({"type": "combo_opened", "perfect": chain_info_p["perfect"], "combo_level": chain_info_p["combo_level"], "momentum": chain_info_p["momentum"]})
 			points = mini(_max_points(), points + int(_mod("perfect_extra_point", 0)) + 1)
 			perfect_charge = true
 			perfects += 1
@@ -552,79 +737,6 @@ func _damage_enemy(amount: int, events: Array, from_card: bool) -> void:
 		stagger_remaining = maxf(stagger_remaining, float(ev.get("stagger", 1.0)))
 		stats.phases_seen = int(stats.get("phases_seen", 0)) + 1
 		events.append(ev)
-
-
-func _play_card(id: String) -> Array:
-	var events: Array = []
-	if state == BattleState.VICTORY or state == BattleState.DEFEAT:
-		events.append({"type": "card_rejected", "id": id, "reason": "ended"})
-		return events
-	if not scry_options.is_empty():
-		events.append({"type": "card_rejected", "id": id, "reason": "scrying"})
-		return events
-	if not hand.has(id):
-		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
-		return events
-	var def: Dictionary = CardSystemScript.effective_def(id)
-	if def.is_empty():
-		return events
-	var cost := int(def.cost)
-	if _cards_played == 0 and bool(_mod("first_card_free", false)):
-		cost = 0
-	if points < cost:
-		events.append({"type": "card_rejected", "id": id, "reason": "points"})
-		return events
-	points -= cost
-	stats.points_spent = int(stats.get("points_spent", 0)) + cost
-	stats.cards_played = _cards_played + 1
-	_cards_played += 1
-	match String(def["class"]):
-		"斩":
-			stats.zhan_played = int(stats.get("zhan_played", 0)) + 1
-		"御":
-			stats.yu_played = int(stats.get("yu_played", 0)) + 1
-		"佑":
-			stats.you_played = int(stats.get("you_played", 0)) + 1
-	# —— 动作层：卡牌即动作指令，防反后的连招窗口内出牌 = 衔接 ——
-	var action_def: Dictionary = ActionCatalogScript.action_for(String(def.get("id", id)), String(def["class"]))
-	var chain_open := action_state.is_chain_open()
-	var combo_result: Dictionary = combo_system.resolve(action_state, action_def, chain_open, ComboSystemScript.FINISHER_LEVEL)
-	var enemy_hp_before := enemy_hp
-	events.append({
-		"type": "action_started", "id": id, "action": String(action_def["id"]),
-		"transition": String(combo_result["transition"]),
-		"combo_level": int(combo_result["combo_level"]),
-		"momentum": action_state.momentum,
-		"vfx_tier": int(combo_result["vfx_tier"]),
-		"movement": String(action_def.get("movement", "none")),
-	})
-	action_state.current_action = String(action_def["id"])
-	action_state.current_pose = String(action_def.get("exit_pose", "neutral"))
-	action_state.combo_level = int(combo_result["combo_level"])
-	action_state.combo_timer = ActionCatalogScript.COMBO_WINDOW
-	action_state.can_cancel = true
-	action_state.active_tags.assign(action_def.get("combo_tags", []))
-	if String(combo_result["transition"]) == ComboSystemScript.SEAMLESS or bool(combo_result.get("opener", false)):
-		action_state.momentum = mini(5, action_state.momentum + 1)
-		events.append({"type": "momentum_changed", "value": action_state.momentum})
-	for eff: Dictionary in CardSystemScript.effects_of(id):
-		_apply_effect(eff, id, events)
-	# —— 敌人受击层级：由动作属性+连势计算，卡牌不直接控制敌人动画 ——
-	var dealt := enemy_hp_before - enemy_hp
-	if dealt > 0:
-		var level: String = combo_system.pick_impact_level(
-			String(action_def.get("impact_level", "LIGHT")),
-			action_state.combo_level, action_state.momentum,
-			action_def.get("combo_tags", []).has("finisher"))
-		events.append({"type": "action_impact", "id": id, "level": level, "damage": dealt,
-			"finisher": level == "FINISHER", "vfx_tier": int(combo_result["vfx_tier"])})
-		events.append({"type": "enemy_reaction", "level": level})
-	events.append({"type": "action_finished", "id": id, "recovery_mul": float(combo_result["recovery_mul"])})
-	hand.erase(id)
-	discard_pile.append(id)
-	if enemy_hp <= 0 and state not in [BattleState.VICTORY, BattleState.DEFEAT]:
-		_end_battle(events)
-	return events
 
 
 func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:

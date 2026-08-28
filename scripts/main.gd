@@ -268,9 +268,14 @@ func _handle_event(event: Dictionary) -> void:
 			Telemetry.record_summon(int(event.get("cost", 2)))
 	match String(event.get("type", "")):
 		"action_started":
-			player_action.on_action_started(String(event.get("transition", "")), String(event.get("movement", "none")), int(event.get("vfx_tier", 0)))
+			player_action.on_action_started(String(event.get("transition", "")), String(event.get("movement", "none")), int(event.get("vfx_tier", 0)),
+				float(event.get("startup", 0.1)), float(event.get("impact_time", 0.2)), float(event.get("recovery", 0.3)))
 			if String(event.get("transition", "")) == "seamless" and int(event.get("combo_level", 0)) >= 2:
 				hud.show_message("连·%d ｜ 连势 %d" % [int(event.combo_level), int(event.momentum)], Color("f2d487"), 0.7)
+		"action_buffered":
+			hud.show_message("预输入 · %s" % CardSystemScript.title_of(String(event.id)), Color("9caaa9"), 0.6)
+		"action_canceled":
+			hud.show_message("取消衔接 → %s" % CardSystemScript.title_of(String(event.get("by", ""))), Color("7fc5cd"), 0.7)
 		"action_impact":
 			enemy_reaction.react(String(event.get("level", "LIGHT")), int(event.get("vfx_tier", 0)))
 			if bool(event.get("finisher", false)):
@@ -498,6 +503,7 @@ func _run_smoke_test() -> void:
 	assert(s.points >= 1 and s.points <= 2 and s.player_hp == BattleSimulationScript.PLAYER_MAX_HP)
 	_assert_has(events, "impact")
 	events = s.submit({"type": "play_card", "id": "attack"})
+	s.step(0.5)  # 动作时间轴：效果在命中帧（impact_time 0.22）结算
 	assert(s.points >= 0 and s.points <= 1 and s.enemy_hp == 41)
 	assert(s.hand.size() == 3)
 	var evs_summon: Array = s.submit({"type": "summon"})
@@ -523,11 +529,14 @@ func _run_smoke_test() -> void:
 		var shatter_before: int = s.hand.count("shatter")
 		s.perfect_charge = true
 		s.submit({"type": "play_card", "id": "shatter"})
+		s.stagger_remaining = 0.5  # 乘势加成要求命中帧处于僵直窗口
+		s.step(0.6)  # 命中帧（0.36）结算 12+6
 		assert(s.enemy_hp == 46 - 18 and s.points >= 0 and not s.perfect_charge)
 		assert(s.hand.count("shatter") == shatter_before - 1)
 	else:
 		var attack_before: int = s.hand.count("attack")
 		s.submit({"type": "play_card", "id": "attack"})
+		s.step(0.5)  # 命中帧结算
 		assert(s.enemy_hp == 46 - 5 and s.points >= 0)
 		assert(s.hand.count("attack") == attack_before - 1)
 	if s.points >= BattleSimulationScript.SUMMON_COST and s.hand.size() < BattleSimulationScript.HAND_SIZE:
@@ -547,6 +556,7 @@ func _run_smoke_test() -> void:
 	s.points = 2
 	if s.hand.has("guard"):
 		var evs_green: Array = s.submit({"type": "play_card", "id": "guard"})
+		evs_green.append_array(s.step(0.5))  # 命中帧（0.18）结算：斩断鬼手
 		assert(s.state == BattleSimulationScript.BattleState.RESOLVING and s.player_hp == BattleSimulationScript.PLAYER_MAX_HP)
 		_assert_has(evs_green, "grab_cancelled")
 	else:
