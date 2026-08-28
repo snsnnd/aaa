@@ -5,6 +5,8 @@ extends Node2D
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const FxState := preload("res://scripts/presentation/fx_state.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
+const CharacterStateMachineScript := preload("res://assets/game/character_showcase/scripts/character_state_machine.gd")
+const CharacterAnimProfileScript := preload("res://assets/game/character_showcase/scripts/character_anim_profile.gd")
 
 var enemy_sprite: Sprite2D
 var weapon_pivot: Node2D
@@ -13,10 +15,15 @@ var ghost_hand: Node2D
 var attack_trail: Line2D
 var enemy_aura: Sprite2D
 var fx: FxState
+var state_machine: CharacterStateMachine
+var anim_profile: CharacterAnimProfile
 
 
 func setup(state: FxState) -> void:
 	fx = state
+	state_machine = CharacterStateMachineScript.new()
+	add_child(state_machine)
+	_load_profile()
 	enemy_sprite = Sprite2D.new()
 	enemy_sprite.position = Vector2(1006, 350)
 	enemy_sprite.scale = Vector2(0.49, 0.49)
@@ -87,6 +94,18 @@ func _create_ghost_hand() -> Node2D:
 		finger.end_cap_mode = Line2D.LINE_CAP_ROUND
 		hand.add_child(finger)
 	return hand
+
+
+func _load_profile() -> void:
+	var path := "res://assets/game/character_showcase/profiles/profile_%s.tres" % enemy_id_for_profile()
+	if ResourceLoader.exists(path):
+		anim_profile = load(path)
+	else:
+		anim_profile = CharacterAnimProfileScript.new()
+
+
+func enemy_id_for_profile() -> String:
+	return get_parent().sim.enemy_id if get_parent() and get_parent().get("sim") else "watchman"
 
 
 func load_style(folder: String) -> void:
@@ -183,6 +202,9 @@ func death_dissolve() -> void:
 
 func tick(delta: float) -> void:
 	var s := sim()
+	if state_machine:
+		_sync_phase(s)
+		state_machine.update(delta)
 	if s.state == BattleSimulationScript.BattleState.WINDUP:
 		_update_attack_visuals()
 		if s.stagger_remaining > 0.0:
@@ -201,6 +223,32 @@ func tick(delta: float) -> void:
 	enemy_aura.modulate.a = 0.50 + sin(get_parent().view_time() * 1.8) * 0.12
 
 
+func _sync_phase(s) -> void:
+	if s.state != BattleSimulationScript.BattleState.WINDUP:
+		if state_machine.current_state != state_machine.State.IDLE:
+			state_machine.transition_to(state_machine.State.IDLE)
+		return
+	var phases: Array = s.current_intent.get("phases", [])
+	if phases.is_empty():
+		return
+	var elapsed: float = s.attack_elapsed
+	var is_staggered: bool = s.stagger_remaining > 0.0
+	var current_phase := ""
+	var progress := 0.0
+	for i in phases.size():
+		if elapsed < float(phases[i].until):
+			current_phase = String(phases[i].name)
+			var prev := 0.0
+			if i > 0:
+				prev = float(phases[i - 1].until)
+			progress = (elapsed - prev) / maxf(0.01, float(phases[i].until) - prev)
+			break
+	if current_phase == "":
+		current_phase = "recover"
+		progress = 1.0
+	state_machine.sync_move_phase(current_phase, progress, is_staggered)
+
+
 func _update_attack_visuals() -> void:
 	var s := sim()
 	var duration: float = s.current_intent.duration
@@ -217,8 +265,9 @@ func _update_attack_visuals() -> void:
 func _red_slow_blade(ratio: float) -> void:
 	if ratio < 0.36:
 		var raise := smoothstep(0.0, 0.36, ratio)
+		var windup: float = anim_profile.attack_windup_px if anim_profile else 10.0
 		weapon_pivot.rotation = lerpf(-0.45, -2.22, raise)
-		enemy_sprite.position.x = lerpf(1006.0, 1016.0, raise)
+		enemy_sprite.position.x = lerpf(1006.0, 1006.0 + windup, raise)
 		enemy_sprite.rotation = lerpf(0.0, 0.045, raise)
 	elif ratio < 0.68:
 		var hold := (ratio - 0.36) / 0.32
@@ -227,8 +276,9 @@ func _red_slow_blade(ratio: float) -> void:
 		enemy_sprite.rotation = 0.045 + sin(hold * PI * 5.0) * 0.004
 	else:
 		var commit := smoothstep(0.68, 1.0, ratio)
+		var lunge: float = anim_profile.attack_lunge_px if anim_profile else 60.0
 		weapon_pivot.rotation = lerpf(-2.22, 1.45, commit)
-		enemy_sprite.position.x = lerpf(1016.0, 530.0, commit)
+		enemy_sprite.position.x = lerpf(1016.0, 1016.0 - lunge * 1.0, commit)
 		enemy_sprite.rotation = lerpf(0.045, -0.18, commit)
 	attack_trail.visible = ratio > 0.74
 	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-300, 0)])
