@@ -3,9 +3,12 @@ extends Node2D
 ## 舞台：相机、背景、雨雾等环境层与镜头震动。
 
 const FxState := preload("res://scripts/presentation/fx_state.gd")
+const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 
 var camera: Camera2D
 var background: Sprite2D
+var parallax_layers: Array[Sprite2D] = []
+var parallax_drifts: Array[float] = []
 var fog_back: Line2D
 var fog_front: Line2D
 var rain_drops: Array[Line2D] = []
@@ -23,11 +26,17 @@ func setup(state: FxState) -> void:
 	camera.enabled = true
 	add_child(camera)
 
-	background = Sprite2D.new()
-	background.position = Vector2(1280.0, 720.0) * 0.5
-	background.scale = Vector2(2.0 / 3.0, 2.0 / 3.0)
-	background.z_index = -10
-	add_child(background)
+	for layer_cfg in PresentationCatalog.PARALLAX_LAYERS:
+		var layer := Sprite2D.new()
+		layer.texture = load(layer_cfg.texture)
+		layer.position = Vector2(1280.0, 720.0) * 0.5
+		layer.scale = Vector2(2.0 / 3.0, 2.0 / 3.0)
+		layer.z_index = int(layer_cfg.z)
+		layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		add_child(layer)
+		parallax_layers.append(layer)
+		parallax_drifts.append(float(layer_cfg.drift))
+	background = parallax_layers[2]
 
 	var ground_tint := Polygon2D.new()
 	ground_tint.polygon = PackedVector2Array([Vector2(0, 430), Vector2(1280, 430), Vector2(1280, 555), Vector2(0, 555)])
@@ -66,12 +75,14 @@ func _create_rain() -> void:
 
 
 func load_style(folder: String) -> void:
-	background.texture = load("res://assets/%s/background_old_street.png" % folder)
-	background.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	for layer in parallax_layers:
+		layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func tick(delta: float, animation_time: float) -> void:
-	background.position.x = 640.0 + sin(animation_time * 0.10) * 2.5
+	for i in parallax_layers.size():
+		var drift_speed: float = parallax_drifts[i]
+		parallax_layers[i].position.x = 640.0 + sin(animation_time * 0.10 * drift_speed) * (3.0 * drift_speed)
 	fog_back.position.x = fmod(animation_time * 7.0, 420.0) - 210.0
 	fog_front.position.x = 210.0 - fmod(animation_time * 10.0, 420.0)
 	for drop in rain_drops:

@@ -23,9 +23,6 @@ var talismans: Array[Node2D] = []
 
 func setup(state: FxState) -> void:
 	fx = state
-	state_machine = CharacterStateMachineScript.new()
-	add_child(state_machine)
-	state_machine.setup(self)
 	var prof_path := "res://assets/game/character_showcase/profiles/profile_keeper.tres"
 	if ResourceLoader.exists(prof_path):
 		anim_profile = load(prof_path)
@@ -38,11 +35,15 @@ func setup(state: FxState) -> void:
 	player_sprite.scale = Vector2(0.49, 0.49)
 	player_pivot.add_child(player_sprite)
 
+	lantern_sprite = Sprite2D.new()
+	lantern_sprite.position = Vector2(58, 58)
+	lantern_sprite.scale = Vector2(0.49, 0.49)
+	lantern_sprite.visible = false
+	player_pivot.add_child(lantern_sprite)
+
 	lantern_glow = Sprite2D.new()
 	lantern_glow.texture = _make_glow_texture(Color(1.0, 0.42, 0.08, 0.48))
 	lantern_glow.position = player_pivot.position + Vector2(118, 112)
-	if anim_profile and anim_profile.prop_sway_angle > 0.0:
-		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq + anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
 	lantern_glow.scale = Vector2(2.35, 2.35)
 	var lantern_material := CanvasItemMaterial.new()
 	lantern_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -52,8 +53,17 @@ func setup(state: FxState) -> void:
 
 
 func load_style(folder: String) -> void:
-	player_sprite.texture = load("res://assets/%s/player_keeper.png" % folder)
+	var clean_body := "res://assets/game/characters_sliced/keeper_body_clean.png"
+	var lantern_prop := "res://assets/game/characters_sliced/keeper_lantern_prop.png"
+	if ResourceLoader.exists(clean_body) and ResourceLoader.exists(lantern_prop):
+		player_sprite.texture = load(clean_body)
+		lantern_sprite.texture = load(lantern_prop)
+		lantern_sprite.visible = true
+	else:
+		player_sprite.texture = load("res://assets/%s/player_keeper.png" % folder)
+		lantern_sprite.visible = false
 	player_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	lantern_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func _make_glow_texture(color: Color) -> ImageTexture:
@@ -106,8 +116,8 @@ func tick(delta: float) -> void:
 	fx.glow_boost = lerpf(fx.glow_boost, 0.0, minf(1.0, delta * 3.0))
 	var flicker := sin(animation_time * 9.7) * 0.08 + sin(animation_time * 15.1) * 0.04
 	lantern_glow.position = player_pivot.position + Vector2(118, 112)
-	if anim_profile and anim_profile.prop_sway_angle > 0.0:
-		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq + anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
+	if lantern_sprite and lantern_sprite.visible and anim_profile and anim_profile.prop_sway_angle > 0.0:
+		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq - anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
 	lantern_glow.scale = Vector2.ONE * (2.35 * (1.0 + 0.38 * fx.glow_boost))
 	lantern_glow.modulate.a = clampf((0.76 + flicker) * (1.0 + 0.5 * fx.glow_boost), 0.18, 1.0)
 	_update_talisman_trails()
