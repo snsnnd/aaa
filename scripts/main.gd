@@ -10,11 +10,15 @@ const BattleHudScript := preload("res://scripts/presentation/battle_hud.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 const CardSystemScript := preload("res://scripts/battle/card_system.gd")
 const TutorialScript := preload("res://scripts/app/tutorial.gd")
+const EnemyReactionControllerScript := preload("res://scripts/presentation/enemy_reaction_controller.gd")
+const PlayerActionControllerScript := preload("res://scripts/presentation/player_action_controller.gd")
 
 var sim: BattleSimulationScript
 var view: BattleViewScript
 var hud: BattleHudScript
 var tutorial: TutorialScript
+var enemy_reaction: EnemyReactionControllerScript
+var player_action: PlayerActionControllerScript
 var ai_mode := false
 var ai_wait := false
 var ai_defend := ""
@@ -59,6 +63,10 @@ func _ready() -> void:
 	add_child(hud)
 	hud.setup(sim, _submit, _restart_battle, _abandon_run)
 	tutorial = TutorialScript.new()
+	enemy_reaction = EnemyReactionControllerScript.new()
+	enemy_reaction.setup(view)
+	player_action = PlayerActionControllerScript.new()
+	player_action.setup(view)
 	_apply_attack_presentation()
 	hud.show_message("—— 巡更备战 · 凝神 ——", Color("e2cf9c"), 1.2)
 	if "--smoke-test" in OS.get_cmdline_user_args():
@@ -259,6 +267,16 @@ func _handle_event(event: Dictionary) -> void:
 		"card_summoned":
 			Telemetry.record_summon(int(event.get("cost", 2)))
 	match String(event.get("type", "")):
+		"action_started":
+			player_action.on_action_started(String(event.get("transition", "")), String(event.get("movement", "none")), int(event.get("vfx_tier", 0)))
+			if String(event.get("transition", "")) == "seamless" and int(event.get("combo_level", 0)) >= 2:
+				hud.show_message("连·%d ｜ 连势 %d" % [int(event.combo_level), int(event.momentum)], Color("f2d487"), 0.7)
+		"action_impact":
+			enemy_reaction.react(String(event.get("level", "LIGHT")), int(event.get("vfx_tier", 0)))
+			if bool(event.get("finisher", false)):
+				hud.show_message("终结！", Color("f2d487"), 1.0)
+		"combo_reset":
+			hud.show_message("气息散了", Color("9e8b81"), 0.6)
 		"attack_started":
 			_apply_attack_presentation()
 			hud.refresh()
@@ -321,7 +339,7 @@ func _handle_event(event: Dictionary) -> void:
 			_present_card(event)
 			hud.rebuild_pile_view()
 		"charged_bonus":
-			view.small_enemy_hit(0.32)
+			pass  # 受击层级由 action_impact/enemy_reaction 统一表现
 		"card_summoned":
 			view.pulse_glow(0.5)
 			view.summon_vfx(CardSystemScript.display_id(String(event.id)))
@@ -406,7 +424,7 @@ func _present_card(event: Dictionary) -> void:
 	elif event.has("max_hp"):
 		hud.show_message("长明｜灯油上限 +%d" % int(event.max_hp), data.color, 0.9)
 	elif event.has("damage") and int(event.damage) > 0:
-		view.small_enemy_hit(0.16)
+		# 敌人受击表现由 enemy_reaction 统一分级处理，这里只报文案
 		hud.show_message("%s｜散去 %d 点怨气" % [data["title"], int(event.damage)], data.color, 0.6)
 	elif event.has("scry"):
 		hud.show_message("问路｜选一张顺手的符牌", data.color, 0.9)

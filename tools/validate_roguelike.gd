@@ -23,6 +23,7 @@ func _init() -> void:
 	_check_enemy_traits()
 	_check_boss_phases()
 	_check_wenlu_scry()
+	_check_combo_system()
 	_check_effect_floats()
 	_check_boss_phase_order()
 	_check_battle_seed_determinism()
@@ -227,6 +228,104 @@ func _check_enemy_traits() -> void:
 	_check("flag_paper_face_done", sim7.enemy_hp == hp_before7 - 3, "dmg=%d" % (hp_before7 - sim7.enemy_hp))
 
 
+# ————————————————————— 连招/动作层 —————————————————————
+
+func _check_combo_system() -> void:
+	var ComboSys: GDScript = preload("res://scripts/battle/combo_system.gd")
+	var ActionStateCls: GDScript = preload("res://scripts/battle/action_state.gd")
+	var ActionCat: GDScript = preload("res://scripts/battle/action_catalog.gd")
+	# 1) 防反=连招起手：成功写入 parry_exit 且窗口打开
+	var sim := BattleSimulationScript.new()
+	sim.restart()
+	sim.attack_elapsed = float(sim.current_intent.duration) - 0.20
+	sim.submit({"type": "defend"})
+	sim.step(1.0)  # 结算成功防范
+	_check("combo_parry_opens", sim.action_state.current_pose == "parry_exit" and sim.action_state.is_chain_open(),
+		"pose=%s timer=%.2f lvl=%d" % [sim.action_state.current_pose, sim.action_state.combo_timer, sim.action_state.combo_level])
+	# 2) 连招窗口内出牌：产生 action_started 且顺势衔接涨连势
+	var act_events := []
+	for card_id in ["attack", "zhuying", "liebo"]:
+		if sim.action_state.combo_timer <= 0.0:
+			sim.action_state.combo_timer = ActionCat.COMBO_WINDOW
+		sim.points = 9
+		if not sim.hand.has(card_id):
+			sim.hand.append(card_id)
+		for ev in sim.submit({"type": "play_card", "id": card_id}):
+			act_events.append(ev)
+	var started := act_events.filter(func(e): return String(e.get("type", "")) == "action_started")
+	var seamless := act_events.filter(func(e): return String(e.get("type", "")) == "action_started" and String(e.get("transition", "")) == "seamless")
+	var impacts := act_events.filter(func(e): return String(e.get("type", "")) == "action_impact")
+	var reactions := act_events.filter(func(e): return String(e.get("type", "")) == "enemy_reaction")
+	_check("combo_action_events", started.size() == 3 and impacts.size() == 3 and reactions.size() == 3,
+		"started=%d impacts=%d reactions=%d" % [started.size(), impacts.size(), reactions.size()])
+	_check("combo_seamless_chain", seamless.size() >= 1 and sim.action_state.momentum >= 1,
+		"seamless=%d momentum=%d lvl=%d" % [seamless.size(), sim.action_state.momentum, sim.action_state.combo_level])
+	# 3) 受击清空连势
+	sim.action_state.momentum = 3
+	sim.action_state.on_player_hit()
+	_check("combo_hit_clears", sim.action_state.momentum == 0 and not sim.action_state.is_chain_open())
+	# 4) 防反失误清空连势
+	sim.action_state.momentum = 2
+	sim.action_state.on_defense_miss()
+	_check("combo_miss_clears", sim.action_state.momentum == 0)
+	# 5) 终结开放：连招等级≥3 且卡带 finisher 标签 → FINISHER 层级
+	var st = ActionStateCls.new()
+	st.combo_level = 3
+	st.current_pose = "low"
+	st.combo_timer = 1.0
+	var fin_action: Dictionary = ActionCat.ACTIONS["act_tianping"]
+	var res: Dictionary = ComboSys.new().resolve(st, fin_action, true, ComboSys.FINISHER_LEVEL)
+	_check("combo_finisher_gate", bool(res["finisher_available"]), str(res))
+	# 连招等级不足时不开放（1 级顺势 +1 → 2 级，仍不到 3）
+	st.combo_level = 1
+	res = ComboSys.new().resolve(st, fin_action, true, ComboSys.FINISHER_LEVEL)
+	_check("combo_finisher_gate_low", not bool(res["finisher_available"]), str(res["combo_level"]))
+	# 6) 层级升级：连招≥3 → MEDIUM→HEAVY；连势≥2 再升一级 → BREAK
+	var cs = ComboSys.new()
+	_check("combo_impact_upgrade", String(cs.pick_impact_level("MEDIUM", 3, 0, false)) == "HEAVY",
+		cs.pick_impact_level("MEDIUM", 3, 0, false))
+	_check("combo_impact_upgrade_momentum", String(cs.pick_impact_level("MEDIUM", 3, 2, false)) == "BREAK",
+		cs.pick_impact_level("MEDIUM", 3, 2, false))
+	# 7) 蓝牌走 EnemyTimeline：延灯经标准接口改时间轴（命中点后移）
+	var sim2 := BattleSimulationScript.new()
+	sim2.restart()
+	sim2.points = 9
+	sim2.hand.clear()
+	sim2.hand.append("yandeng")
+	var dur_before: float = float(sim2.current_intent.duration)
+	var strikes_before: Array = sim2.current_intent.get("strikes", []).duplicate()
+	sim2.submit({"type": "play_card", "id": "yandeng"})
+	var ok_delay: bool = absf(float(sim2.current_intent.duration) - dur_before - 0.4) < 0.001
+	if not strikes_before.is_empty():
+		ok_delay = ok_delay and absf(float(sim2.current_intent["strikes"][0]) - float(strikes_before[0]) - 0.4) < 0.001
+	_check("combo_enemy_timeline_delay", ok_delay)
+	# 8) 借刀经标准接口打断（守灯人免疫保持）
+	var sim3 := BattleSimulationScript.new()
+	sim3.restart()
+	sim3.points = 9
+	sim3.hand.clear()
+	sim3.hand.append("jiedao")
+	var evs3 := sim3.submit({"type": "play_card", "id": "jiedao"})
+	var interrupted := false
+	for ev in evs3:
+		if String(ev.get("type", "")) == "action_interrupted":
+			interrupted = true
+	_check("combo_enemy_timeline_interrupt", interrupted and sim3.state == BattleSimulationScript.BattleState.RESOLVING)
+	# 9) Boss 免疫：守灯人不可被借刀打断
+	var sim4 := BattleSimulationScript.new()
+	sim4.enemy_id = "lantern_keeper"
+	sim4.restart()
+	sim4.points = 9
+	sim4.hand.clear()
+	sim4.hand.append("jiedao")
+	var evs4 := sim4.submit({"type": "play_card", "id": "jiedao"})
+	var boss_interrupted := false
+	for ev in evs4:
+		if String(ev.get("type", "")) == "action_interrupted":
+			boss_interrupted = true
+	_check("combo_boss_interrupt_immune", not boss_interrupted and sim4.state == BattleSimulationScript.BattleState.WINDUP)
+
+
 # ————————————————————— Effect 数值完整性 —————————————————————
 
 func _check_effect_floats() -> void:
@@ -338,8 +437,9 @@ func _check_wiring_audit() -> void:
 	# 规则层源码里必须真实出现每个遗物 mod 键 / 剧情旗标 / 特质的消费点
 	var sim_src := FileAccess.open("res://scripts/battle/battle_simulation.gd", FileAccess.READ).get_as_text()
 	var ai_src := FileAccess.open("res://scripts/battle/enemy_ai.gd", FileAccess.READ).get_as_text()
+	var timeline_src := FileAccess.open("res://scripts/battle/enemy_timeline.gd", FileAccess.READ).get_as_text()
 	var flow_src := FileAccess.open("res://scripts/app/run_flow.gd", FileAccess.READ).get_as_text()
-	var combined := sim_src + "\n" + flow_src
+	var combined := sim_src + "\n" + timeline_src + "\n" + flow_src
 	var missing: Array[String] = []
 	for rid in ContentCatalog.RELICS:
 		for key in ContentCatalog.RELICS[rid]["mods"]:

@@ -169,3 +169,17 @@
 - **全 Run Seed 管线**：战斗种子由 `hash([run_seed, row, col])` 派生（经 run_mods 传入），`randi()` 全局随机清零（战后金币改 run.rng）；相同 Seed 地图+战斗初始状态完全可复现。
 - **实现级自动校验**：validate_roguelike 新增 `wiring_audit`——遍历遗物 mods / 剧情旗标 / 敌人特质 / 难度键，断言规则层源码存在真实消费点（首跑即抓到 silver_coin 硬编码）。另修 trait_pull 测试假阳性（超时也算过 → 现在断言弃牌堆归属）。
 - 验证基线：roguelike 35/35，冒烟/三构筑/playtest 回归通过。
+
+### D29: 连招/动作系统（"防反即起手，卡牌即动作"）✅
+- **核心循环升级**：读招 → 防反（夺取主动权+生成还愿）→ 红牌编排自己动作 / 蓝牌改写敌人时间轴 / 黄牌改变当前规则 → 点数耗尽回到防守。防反本身就是连招起手：成功写入 `parry_exit` 姿态并打开 2.6s 连招窗口，下一张牌直接从防反姿态接出去，不回 Idle。
+- **三层解耦**（卡牌定义"做什么"、动作定义"怎么动"、表现定义"怎么看起来"）：
+  - `action_catalog.gd`：34 张卡的动作属性（entry_pose/exit_pose/movement/startup/impact_time/recovery/cancel_window/impact_level/combo_tags），姿态词汇 9 个、位移 6 个。
+  - `combo_system.gd`：动作语法解析器。不写 A+B=C 死组合——按"收势+起手+顺势表+连势"计算 transition（seamless/glued/heavy_swap），50/100 张卡无组合爆炸。
+  - `action_state.gd`：玩家动作状态唯一事实源（current_pose/combo_level/combo_timer/momentum/can_cancel/active_tags）。
+  - `enemy_timeline.gd`：蓝牌唯一合法接口（interrupt/delay/remove_next_hit/extend_recovery/suppress_fake/make_blockable/stagger/weaken/widen_window/cancel_grab）。Boss 免疫只写在一处，卡牌不得侵入敌人状态机。
+- **连势（momentum 0-5）**：顺势衔接 +1、完美防反 +1；受击/防反失误清空、连招窗口关闭软衰减。影响：敌人受击层级升级、表现层 VFX tier、转场速度。
+- **连招奖励不做成伤害倍率**（设计红线）：升级的是敌人受击层级（LIGHT→MEDIUM→HEAVY→BREAK→FINISHER 阶梯）、终结动作开放（连招≥3 且卡带 finisher 标签）、转场与 VFX 层级。所有伤害数值不变。
+- **敌人受击层级**（enemy_reaction_controller）：卡牌只声明 impact_level，由表现层统一映射 7 级受击反应——连打四张牌不再是"闪四下"。
+- **事件**：新增 action_started / action_impact / enemy_reaction / action_finished / combo_opened / combo_reset / momentum_changed；旧 card_played 事件保持兼容（遥测与既有表现不受影响）。
+- **表现层（潦草版）**：player_action_controller（位移示意荡动+连势闪光）、enemy_reaction_controller（7 级分级）；正式姿态过渡动画与受击动画后续单独优化。
+- **验证**：roguelike 校验新增 13 项连招测试（防反起手/顺势连段/连势清空/终结门控/层级升级/时间轴接口/Boss 免疫），47/47 全过；冒烟/三构筑/playtest 回归通过。

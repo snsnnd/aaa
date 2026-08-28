@@ -4,6 +4,10 @@ extends RefCounted
 const ContentCatalog := preload("res://scripts/battle/content_catalog.gd")
 const CardSystemScript := preload("res://scripts/battle/card_system.gd")
 const EnemyAIScript := preload("res://scripts/battle/enemy_ai.gd")
+const ActionCatalogScript := preload("res://scripts/battle/action_catalog.gd")
+const ComboSystemScript := preload("res://scripts/battle/combo_system.gd")
+const ActionStateScript := preload("res://scripts/battle/action_state.gd")
+const EnemyTimelineScript := preload("res://scripts/battle/enemy_timeline.gd")
 
 ## 纯规则层：不含 Node、输入、音频、动画或任何 Godot 场景对象。
 ## 输入只能是 submit() 的命令，输出只能是事件数组，状态全部可读、可快照。
@@ -72,6 +76,10 @@ var stats := {}
 var defense_log: Array[Dictionary] = []
 var current_intent: Dictionary = {}
 var ai: EnemyAIScript
+## 连招/动作层：防反是连招起手，卡牌是动作指令。
+var action_state: ActionStateScript
+var combo_system: ComboSystemScript
+var enemy_timeline: EnemyTimelineScript
 ## 局外修饰：遗物 mods + 难度修饰 + 反应辅助。由 RunFlow/apply_run_config 写入。
 var run_mods: Dictionary = {}
 ## 剧情旗标（RunState.flags 的只读投影）。
@@ -87,6 +95,9 @@ var _next_window_bonus := 0.0
 
 func _init() -> void:
 	ai = EnemyAIScript.new()
+	combo_system = ComboSystemScript.new()
+	action_state = ActionStateScript.new()
+	enemy_timeline = EnemyTimelineScript.new(self)
 	restart()
 
 
@@ -158,6 +169,7 @@ func restart(hp: int = -1) -> void:
 	_first_miss_used = false
 	_next_window_bonus = 0.0
 	scry_options.clear()
+	action_state.reset()
 	_reset_stats()
 	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
@@ -301,6 +313,9 @@ func step(delta: float) -> Array:
 		defense_cooldown = maxf(0.0, defense_cooldown - delta)
 		if defense_cooldown == 0.0:
 			events.append({"type": "cooldown_expired"})
+	# 连招窗口推进：窗口关闭 = 停顿过久，连势软衰减并重置连段
+	if action_state.tick(delta):
+		events.append({"type": "combo_reset", "momentum": action_state.momentum})
 	match state:
 		BattleState.WINDUP:
 			_step_windup(delta, events)
@@ -392,8 +407,12 @@ func _attempt_defense() -> Array:
 		queued_defense = DefenseGrade.SUCCESS
 	else:
 		_register_miss(events, false)
+		action_state.on_defense_miss()
 		events.append({"type": "defense_miss"})
 		return events
+	# 防反 = 连招起手：成功写入 parry_exit 姿态并打开连招窗口；完美提供更强起势与连势
+	var chain_info: Dictionary = action_state.on_defense(queued_defense, ActionCatalogScript.COMBO_WINDOW)
+	events.append({"type": "combo_opened", "perfect": chain_info["perfect"], "combo_level": chain_info["combo_level"], "momentum": chain_info["momentum"]})
 	events.append({"type": "defense_queued", "grade": queued_defense})
 	return events
 
@@ -466,6 +485,7 @@ func _resolve_impact(events: Array) -> void:
 			perfect_charge = false
 			var damage := _incoming_damage()
 			player_hp = maxi(0, player_hp - damage)
+			action_state.on_player_hit()  # 受击清空连势（设计：受伤、停顿、失误清空）
 			stats.unblocked_hits = int(stats.get("unblocked_hits", 0)) + 1
 			stats.damage_taken = int(stats.get("damage_taken", 0)) + damage
 			_log_defense("未防范 " + current_intent.get("title", ""))
@@ -565,8 +585,41 @@ func _play_card(id: String) -> Array:
 			stats.yu_played = int(stats.get("yu_played", 0)) + 1
 		"佑":
 			stats.you_played = int(stats.get("you_played", 0)) + 1
+	# —— 动作层：卡牌即动作指令，防反后的连招窗口内出牌 = 衔接 ——
+	var action_def: Dictionary = ActionCatalogScript.action_for(String(def.get("id", id)), String(def["class"]))
+	var chain_open := action_state.is_chain_open()
+	var combo_result: Dictionary = combo_system.resolve(action_state, action_def, chain_open, ComboSystemScript.FINISHER_LEVEL)
+	var enemy_hp_before := enemy_hp
+	events.append({
+		"type": "action_started", "id": id, "action": String(action_def["id"]),
+		"transition": String(combo_result["transition"]),
+		"combo_level": int(combo_result["combo_level"]),
+		"momentum": action_state.momentum,
+		"vfx_tier": int(combo_result["vfx_tier"]),
+		"movement": String(action_def.get("movement", "none")),
+	})
+	action_state.current_action = String(action_def["id"])
+	action_state.current_pose = String(action_def.get("exit_pose", "neutral"))
+	action_state.combo_level = int(combo_result["combo_level"])
+	action_state.combo_timer = ActionCatalogScript.COMBO_WINDOW
+	action_state.can_cancel = true
+	action_state.active_tags.assign(action_def.get("combo_tags", []))
+	if String(combo_result["transition"]) == ComboSystemScript.SEAMLESS:
+		action_state.momentum = mini(5, action_state.momentum + 1)
+		events.append({"type": "momentum_changed", "value": action_state.momentum})
 	for eff: Dictionary in CardSystemScript.effects_of(id):
 		_apply_effect(eff, id, events)
+	# —— 敌人受击层级：由动作属性+连势计算，卡牌不直接控制敌人动画 ——
+	var dealt := enemy_hp_before - enemy_hp
+	if dealt > 0:
+		var level: String = combo_system.pick_impact_level(
+			String(action_def.get("impact_level", "LIGHT")),
+			action_state.combo_level, action_state.momentum,
+			action_def.get("combo_tags", []).has("finisher"))
+		events.append({"type": "action_impact", "id": id, "level": level, "damage": dealt,
+			"finisher": level == "FINISHER", "vfx_tier": int(combo_result["vfx_tier"])})
+		events.append({"type": "enemy_reaction", "level": level})
+	events.append({"type": "action_finished", "id": id, "recovery_mul": float(combo_result["recovery_mul"])})
 	hand.erase(id)
 	discard_pile.append(id)
 	if enemy_hp <= 0 and state not in [BattleState.VICTORY, BattleState.DEFEAT]:
@@ -610,51 +663,39 @@ func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:
 			events.append({"type": "card_played", "id": id, "self_damage": n})
 		"stagger":
 			if state == BattleState.WINDUP and amt > 0.0:
-				var amount := amt * float(_mod("stagger_mul", 1.0))
-				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + amount)
-				events.append({"type": "stagger", "duration": amount})
+				var before := stagger_remaining
+				enemy_timeline.stagger(amt)
+				if stagger_remaining > before:
+					events.append({"type": "stagger", "duration": stagger_remaining - before})
 		"grab_cancel":
-			if state == BattleState.WINDUP and bool(current_intent.get("unblockable", false)) and fake_released:
-				_finish_action(events)
-				points = mini(_max_points(), points + 1)
+			if enemy_timeline.cancel_grab():
 				events.append({"type": "grab_cancelled", "points": 1})
 				events.append({"type": "points_changed"})
 		"interrupt":
-			if state == BattleState.WINDUP and enemy_id != "lantern_keeper":
-				_finish_action(events)
-				stats.interrupts = int(stats.get("interrupts", 0)) + 1
+			if enemy_timeline.interrupt():
 				events.append({"type": "action_interrupted"})
 		"force_perfect":
 			force_perfect_next = true
 		"mirror":
 			mirror_charges = mini(3, mirror_charges + n)
 		"fear":
-			podan_mul = float(eff.get("mul", 1.0))
+			enemy_timeline.weaken(float(eff.get("mul", 1.0)))
 		"golden":
 			golden_body += n
 		"cleanse":
-			if bool(current_intent.get("unblockable", false)) and state == BattleState.WINDUP:
-				current_intent.unblockable = false
+			if enemy_timeline.make_blockable():
 				events.append({"type": "cleansed"})
 		"suppress_fake":
-			current_intent.fake = -1.0
-			fake_released = true
+			enemy_timeline.suppress_fake()
 		"delay_impact":
-			var t := amt
-			if current_intent.has("strikes"):
-				var arr: Array = []
-				for s in current_intent.strikes:
-					arr.append(float(s) + t)
-				current_intent.strikes = arr
-			current_intent.duration = float(current_intent.duration) + t
-			events.append({"type": "impact_delayed", "amount": t})
+			enemy_timeline.delay(amt)
+			events.append({"type": "impact_delayed", "amount": amt})
 		"widen_window":
-			current_intent.window = float(current_intent.window) + float(eff.get("amount", 0.0))
+			enemy_timeline.widen_window(float(eff.get("amount", 0.0)))
 		"widen_window_next":
 			_next_window_bonus += float(eff.get("amount", 0.0))
 		"skip_next_strike":
-			if current_intent.get("strikes", []).size() > strike_index:
-				_skip_next_strike = true
+			enemy_timeline.remove_next_hit()
 		"draw":
 			for _i in n:
 				_refill_draw_pile()
