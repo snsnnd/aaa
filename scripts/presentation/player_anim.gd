@@ -4,11 +4,17 @@ extends Node2D
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const FxState := preload("res://scripts/presentation/fx_state.gd")
+const CharacterStateMachineScript := preload("res://assets/game/character_showcase/scripts/character_state_machine.gd")
+const CharacterAnimProfileScript := preload("res://assets/game/character_showcase/scripts/character_anim_profile.gd")
+const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 
 var player_pivot: Node2D
 var player_sprite: Sprite2D
+var lantern_sprite: Sprite2D
 var lantern_glow: Sprite2D
 var fx: FxState
+var state_machine: CharacterStateMachine
+var anim_profile: CharacterAnimProfile
 var pose_x := 0.0
 var pose_rot := 0.0
 var animation_time := 0.0
@@ -17,6 +23,12 @@ var talismans: Array[Node2D] = []
 
 func setup(state: FxState) -> void:
 	fx = state
+	state_machine = CharacterStateMachineScript.new()
+	add_child(state_machine)
+	state_machine.setup(self)
+	var prof_path := "res://assets/game/character_showcase/profiles/profile_keeper.tres"
+	if ResourceLoader.exists(prof_path):
+		anim_profile = load(prof_path)
 	player_pivot = Node2D.new()
 	player_pivot.position = Vector2(264, 355)
 	player_pivot.z_index = 1
@@ -29,6 +41,8 @@ func setup(state: FxState) -> void:
 	lantern_glow = Sprite2D.new()
 	lantern_glow.texture = _make_glow_texture(Color(1.0, 0.42, 0.08, 0.48))
 	lantern_glow.position = player_pivot.position + Vector2(118, 112)
+	if anim_profile and anim_profile.prop_sway_angle > 0.0:
+		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq + anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
 	lantern_glow.scale = Vector2(2.35, 2.35)
 	var lantern_material := CanvasItemMaterial.new()
 	lantern_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -82,12 +96,18 @@ func death_dim() -> void:
 
 func tick(delta: float) -> void:
 	animation_time += delta
-	player_sprite.position = Vector2(0.0, sin(animation_time * 1.65) * 3.0)
-	player_sprite.rotation = sin(animation_time * 1.25) * 0.006
+	var p := anim_profile
+	var bs: float = anim_profile.breath_speed if anim_profile else 1.65
+	var bh: float = anim_profile.breath_height if anim_profile else 3.0
+	var idle_tilt: float = anim_profile.idle_tilt_angle if anim_profile else 0.006
+	player_sprite.position = Vector2(0.0, sin(animation_time * bs) * bh)
+	player_sprite.rotation = sin(animation_time * bs * 0.75) * idle_tilt
 	_update_combat_pose(delta)
 	fx.glow_boost = lerpf(fx.glow_boost, 0.0, minf(1.0, delta * 3.0))
 	var flicker := sin(animation_time * 9.7) * 0.08 + sin(animation_time * 15.1) * 0.04
 	lantern_glow.position = player_pivot.position + Vector2(118, 112)
+	if anim_profile and anim_profile.prop_sway_angle > 0.0:
+		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq + anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
 	lantern_glow.scale = Vector2.ONE * (2.35 * (1.0 + 0.38 * fx.glow_boost))
 	lantern_glow.modulate.a = clampf((0.76 + flicker) * (1.0 + 0.5 * fx.glow_boost), 0.18, 1.0)
 	_update_talisman_trails()

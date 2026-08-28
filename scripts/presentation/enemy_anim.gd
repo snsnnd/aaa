@@ -179,8 +179,12 @@ func small_hit() -> void:
 	enemy_sprite.modulate = Color("ffd59a")
 	create_tween().tween_property(enemy_sprite, "modulate", Color.WHITE, 0.18).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	var original_scale := enemy_sprite.scale
-	enemy_sprite.scale = original_scale * Vector2(1.07, 0.93)
+	var recoil: float = anim_profile.hit_recoil_px if anim_profile else 20.0
+	var tilt: float = anim_profile.hit_tilt_rad if anim_profile else 0.08
+	enemy_sprite.scale = original_scale * Vector2(1.0 + recoil * 0.003, 1.0 - recoil * 0.002)
+	enemy_sprite.position.x += recoil * 0.15
 	create_tween().tween_property(enemy_sprite, "scale", original_scale, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	create_tween().tween_property(enemy_sprite, "position:x", enemy_sprite.position.x - recoil * 0.15, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func parry_squash() -> void:
