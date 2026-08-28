@@ -39,9 +39,9 @@ func setup(state: FxState) -> void:
 	background = parallax_layers[2]
 
 	var ground_tint := Polygon2D.new()
-	ground_tint.polygon = PackedVector2Array([Vector2(0, 430), Vector2(1280, 430), Vector2(1280, 555), Vector2(0, 555)])
-	ground_tint.color = Color(0.03, 0.04, 0.055, 0.18)
-	ground_tint.z_index = -2
+	ground_tint.polygon = PackedVector2Array([Vector2(0, 480), Vector2(1280, 480), Vector2(1280, 560), Vector2(0, 560)])
+	ground_tint.color = Color(0.03, 0.04, 0.055, 0.12)
+	ground_tint.z_index = -12
 	add_child(ground_tint)
 
 	fog_back = Line2D.new()
@@ -49,14 +49,14 @@ func setup(state: FxState) -> void:
 	fog_back.width = 72.0
 	fog_back.default_color = Color(0.38, 0.55, 0.56, 0.045)
 	fog_back.antialiased = true
-	fog_back.z_index = -4
+	fog_back.z_index = -14
 	add_child(fog_back)
 	fog_front = Line2D.new()
 	fog_front.points = PackedVector2Array([Vector2(-260, 465), Vector2(350, 442), Vector2(940, 478), Vector2(1540, 449)])
 	fog_front.width = 54.0
 	fog_front.default_color = Color(0.55, 0.58, 0.55, 0.032)
 	fog_front.antialiased = true
-	fog_front.z_index = 2
+	fog_front.z_index = -5
 	add_child(fog_front)
 	_create_rain()
 

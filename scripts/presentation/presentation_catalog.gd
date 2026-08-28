@@ -48,7 +48,7 @@ const PARALLAX_LAYERS := [
 	{"texture": "res://assets/game/environments/old_street/bg_layer1_distant_eaves.png", "z": -25, "drift": 0.6},
 	{"texture": "res://assets/game/environments/old_street/bg_layer2_mid_buildings.png", "z": -20, "drift": 1.0},
 	{"texture": "res://assets/game/environments/old_street/bg_layer3_ground_puddles.png", "z": -15, "drift": 1.8},
-	{"texture": "res://assets/game/environments/old_street/bg_layer4_foreground_fog.png", "z": 8, "drift": 2.6},
+	{"texture": "res://assets/game/environments/old_street/bg_layer4_foreground_fog.png", "z": -8, "drift": 2.6},
 ]
 
 const CHARACTER_SLICES := {

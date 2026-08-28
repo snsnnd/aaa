@@ -29,7 +29,7 @@ func setup(state: FxState) -> void:
 		anim_profile = load(prof_path)
 	player_pivot = Node2D.new()
 	player_pivot.position = Vector2(264, 355)
-	player_pivot.z_index = 1
+	player_pivot.z_index = 10
 	add_child(player_pivot)
 	player_sprite = Sprite2D.new()
 	player_sprite.position = Vector2.ZERO

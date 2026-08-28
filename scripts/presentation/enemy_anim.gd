@@ -27,13 +27,13 @@ func setup(state: FxState) -> void:
 	enemy_sprite = Sprite2D.new()
 	enemy_sprite.position = Vector2(1006, 350)
 	enemy_sprite.scale = Vector2(0.49, 0.49)
-	enemy_sprite.z_index = 1
+	enemy_sprite.z_index = 10
 	add_child(enemy_sprite)
 
 	weapon_pivot = Node2D.new()
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 	weapon_pivot.rotation = -0.45
-	weapon_pivot.z_index = 3
+	weapon_pivot.z_index = 12
 	add_child(weapon_pivot)
 	weapon_sprite = Sprite2D.new()
 	weapon_sprite.position = Vector2(0, 98)
@@ -43,7 +43,7 @@ func setup(state: FxState) -> void:
 	ghost_hand = _create_ghost_hand()
 	ghost_hand.position = enemy_sprite.position + Vector2(-6, -8)
 	ghost_hand.visible = false
-	ghost_hand.z_index = 3
+	ghost_hand.z_index = 13
 	add_child(ghost_hand)
 
 	enemy_aura = Sprite2D.new()
@@ -64,7 +64,7 @@ func setup(state: FxState) -> void:
 	attack_trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	attack_trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 	attack_trail.visible = false
-	attack_trail.z_index = 3
+	attack_trail.z_index = 11
 	add_child(attack_trail)
 
 
@@ -279,10 +279,10 @@ func _red_slow_blade(ratio: float) -> void:
 		enemy_sprite.position.x = 1016.0 + sin(hold * PI * 5.0) * 1.5
 		enemy_sprite.rotation = 0.045 + sin(hold * PI * 5.0) * 0.004
 	else:
+		# 真实落刀承诺帧：身体深度前冲至 610px，刀刃切入玩家身前接触点 (x=474)！
 		var commit := smoothstep(0.68, 1.0, ratio)
-		var lunge: float = anim_profile.attack_lunge_px if anim_profile else 60.0
 		weapon_pivot.rotation = lerpf(-2.22, 1.45, commit)
-		enemy_sprite.position.x = lerpf(1016.0, 1016.0 - lunge * 1.0, commit)
+		enemy_sprite.position.x = lerpf(1016.0, 610.0, commit)
 		enemy_sprite.rotation = lerpf(0.045, -0.18, commit)
 	attack_trail.visible = ratio > 0.74
 	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-300, 0)])
@@ -300,7 +300,7 @@ func _strike_combo(ratio: float) -> void:
 	var idx: int = clampi(s.strike_index, 0, strikes.size() - 1)
 	var strike_time := float(strikes[idx])
 	var start_time := 0.0 if idx == 0 else float(strikes[idx - 1])
-	var reach := 340.0 + 40.0 * float(idx)
+	var reach := 430.0 + 30.0 * float(idx) # 冲刺至 x=576，刀刃切入接触点
 	var phase := clampf((s.attack_elapsed - start_time) / (strike_time - start_time), 0.0, 1.0)
 	var commit := clampf((phase - 0.56) / 0.44, 0.0, 1.0)
 	if phase < 0.56:
@@ -335,11 +335,12 @@ func _green_grab(ratio: float) -> void:
 		ghost_hand.position = enemy_sprite.position + Vector2(-6, -8)
 		ghost_hand.scale = Vector2(0.55, 0.8)
 	else:
+		# 鬼手探出直达玩家胸膛！
 		var reach := smoothstep(0.60, 1.0, ratio)
 		weapon_pivot.rotation = -0.20
-		enemy_sprite.position.x = lerpf(1006.0, 940.0, reach)
+		enemy_sprite.position.x = lerpf(1006.0, 780.0, reach)
 		enemy_sprite.rotation = lerpf(-0.02, -0.09, reach)
 		ghost_hand.visible = true
-		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + Vector2(-505, -18), reach)
+		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + Vector2(-540, -18), reach)
 		ghost_hand.scale = Vector2(lerpf(0.55, 1.3, reach), lerpf(0.8, 1.0, reach))
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)

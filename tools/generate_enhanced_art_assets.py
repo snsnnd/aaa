@@ -226,8 +226,9 @@ def generate_card_frames():
         # Inner worn parchment cutout (内嵌旧符纸区域)
         draw.rounded_rectangle([(24, 24), (376, 536)], radius=12, fill=(215, 200, 165, 255), outline=(60, 48, 38, 255), width=4)
         
-        # Illustration window frame (卡面插画留空框)
-        draw.rectangle([(38, 48), (362, 330)], fill=(14, 16, 20, 255), outline=(*color_rgb, 200), width=4)
+        # Transparent cutout for card illustration window (透明插画透视窗口)
+        # We clear the alpha inside the illustration window (38, 48) to (362, 330)
+        draw.rectangle([(38, 48), (362, 330)], fill=(0, 0, 0, 0), outline=(*color_rgb, 220), width=5)
         
         # Cinnabar/Spectral decorative corner runes (四角符文锁边)
         for cx, cy in [(44, 54), (356, 54), (44, 324), (356, 324)]:
