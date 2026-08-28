@@ -311,7 +311,44 @@ func _check_combo_system() -> void:
 		if String(ev.get("type", "")) == "action_interrupted":
 			interrupted = true
 	_check("combo_enemy_timeline_interrupt", interrupted and sim3.state == BattleSimulationScript.BattleState.RESOLVING)
-	# 9) Boss 免疫：守灯人不可被借刀打断
+	# 9) 卡牌直接起手（不经防反）：逐影→斩纸 窗口内无缝衔接，连招照常成立
+	var sim5 := BattleSimulationScript.new()
+	sim5.restart()
+	sim5.points = 9
+	var chain_ok := true
+	var seq := ["zhuying", "attack", "liebo"]
+	var last_level := 0
+	for card_id in seq:
+		if not sim5.hand.has(card_id):
+			sim5.hand.append(card_id)
+		sim5.points = 9
+		var evs5 := sim5.submit({"type": "play_card", "id": card_id})
+		var started5 := false
+		for ev in evs5:
+			if String(ev.get("type", "")) == "action_started":
+				started5 = true
+				last_level = int(ev.get("combo_level", 0))
+		chain_ok = chain_ok and started5
+	_check("combo_card_opener_chain", chain_ok and last_level >= 2 and sim5.action_state.momentum >= 1,
+		"lvl=%d momentum=%d" % [last_level, sim5.action_state.momentum])
+	# 10) opener 标签：逐影作为起手 → 连势 +1；非 opener（斩纸起手）→ 连势不变
+	var sim6 := BattleSimulationScript.new()
+	sim6.restart()
+	sim6.points = 9
+	sim6.hand.clear()
+	sim6.hand.append("zhuying")
+	for ev in sim6.submit({"type": "play_card", "id": "zhuying"}):
+		pass
+	_check("combo_opener_tag_bonus", sim6.action_state.momentum == 1, "momentum=%d" % sim6.action_state.momentum)
+	var sim7 := BattleSimulationScript.new()
+	sim7.restart()
+	sim7.points = 9
+	sim7.hand.clear()
+	sim7.hand.append("attack")
+	for ev in sim7.submit({"type": "play_card", "id": "attack"}):
+		pass
+	_check("combo_plain_open_no_bonus", sim7.action_state.momentum == 0, "momentum=%d" % sim7.action_state.momentum)
+	# 11) Boss 免疫：守灯人不可被借刀打断
 	var sim4 := BattleSimulationScript.new()
 	sim4.enemy_id = "lantern_keeper"
 	sim4.restart()

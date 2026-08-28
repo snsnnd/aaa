@@ -183,3 +183,4 @@
 - **事件**：新增 action_started / action_impact / enemy_reaction / action_finished / combo_opened / combo_reset / momentum_changed；旧 card_played 事件保持兼容（遥测与既有表现不受影响）。
 - **表现层（潦草版）**：player_action_controller（位移示意荡动+连势闪光）、enemy_reaction_controller（7 级分级）；正式姿态过渡动画与受击动画后续单独优化。
 - **验证**：roguelike 校验新增 13 项连招测试（防反起手/顺势连段/连势清空/终结门控/层级升级/时间轴接口/Boss 免疫），47/47 全过；冒烟/三构筑/playtest 回归通过。
+- **起手语义修正（v0.2.1）**：防反不是唯一起手。任何卡牌可直接起手开启连段；`opener` 标签（逐影突进/借刀截招/劫奏断拍/延灯拖拍）标记"好起手"，起手即连势 +1。防反保持最强起手定位（免费、+1/+2 级、parry_exit 姿态）。新增 3 项回归测试（50/50）。

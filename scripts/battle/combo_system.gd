@@ -41,16 +41,20 @@ func resolve(state: ActionState, next_action: Dictionary, chain_open: bool, fini
 		"vfx_tier": 0,
 		"finisher_available": false,
 		"combo_level": state.combo_level,
+		"opener": false,
 	}
 	var entry: String = String(next_action.get("entry_pose", "neutral"))
 	var tags: Array = next_action.get("combo_tags", [])
 
 	if not chain_open:
-		# 新起手：连招等级重置为 1
+		# 新起手：连招等级重置为 1。
+		# 起手不只有防反：突进/截招/拖拍等带 opener 标签的动作本身就是好起手（连势+1）；
+		# 防反仍是最强起手（免费、等级+1/+2），但不是唯一入口。
 		result["combo_level"] = 1
 		result["transition"] = "open"
+		result["opener"] = tags.has("opener")
 		result["vfx_tier"] = _tier(state.momentum, 1)
-		result["finisher_available"] = state.combo_level >= finisher_combo_level and tags.has("finisher")
+		result["finisher_available"] = false
 		return result
 
 	# 衔接解析

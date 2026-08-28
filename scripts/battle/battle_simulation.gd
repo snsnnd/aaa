@@ -604,7 +604,7 @@ func _play_card(id: String) -> Array:
 	action_state.combo_timer = ActionCatalogScript.COMBO_WINDOW
 	action_state.can_cancel = true
 	action_state.active_tags.assign(action_def.get("combo_tags", []))
-	if String(combo_result["transition"]) == ComboSystemScript.SEAMLESS:
+	if String(combo_result["transition"]) == ComboSystemScript.SEAMLESS or bool(combo_result.get("opener", false)):
 		action_state.momentum = mini(5, action_state.momentum + 1)
 		events.append({"type": "momentum_changed", "value": action_state.momentum})
 	for eff: Dictionary in CardSystemScript.effects_of(id):
