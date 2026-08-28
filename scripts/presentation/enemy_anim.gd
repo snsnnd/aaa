@@ -272,30 +272,35 @@ func _update_attack_visuals() -> void:
 
 
 func _red_slow_blade(ratio: float) -> void:
+	# 慢刀快出公式 (Sekiro Delayed Strike Curve):
+	# 0.0 ~ 0.88 (0~2.46s): 极长的高举蓄势与停顿，身体稳稳站在后方 (x=1006)
+	# 0.88 ~ 1.0 (2.46~2.80s, 340ms): 极速前冲突刺下劈！刀刃以极高速度撕裂空气砸向玩家身前接触点 (x=474)！
 	if ratio < 0.36:
 		var raise := smoothstep(0.0, 0.36, ratio)
-		var windup: float = anim_profile.attack_windup_px if anim_profile else 10.0
-		weapon_pivot.rotation = lerpf(-0.45, -2.22, raise)
-		enemy_sprite.position.x = lerpf(1006.0, 1006.0 + windup, raise)
-		enemy_sprite.rotation = lerpf(0.0, 0.045, raise)
-	elif ratio < 0.68:
-		var hold := (ratio - 0.36) / 0.32
-		weapon_pivot.rotation = -2.22 + sin(hold * PI * 7.0) * 0.018
-		enemy_sprite.position.x = 1016.0 + sin(hold * PI * 5.0) * 1.5
-		enemy_sprite.rotation = 0.045 + sin(hold * PI * 5.0) * 0.004
+		weapon_pivot.rotation = lerpf(-0.45, -2.25, raise)
+		enemy_sprite.position.x = lerpf(1006.0, 1020.0, raise)
+		enemy_sprite.rotation = lerpf(0.0, 0.04, raise)
+	elif ratio < 0.88:
+		# 极度稳定的高举慢刀停顿
+		var hold := (ratio - 0.36) / 0.52
+		weapon_pivot.rotation = -2.25 + sin(hold * PI * 8.0) * 0.015
+		enemy_sprite.position.x = 1020.0 + sin(hold * PI * 6.0) * 1.0
+		enemy_sprite.rotation = 0.04 + sin(hold * PI * 6.0) * 0.003
 	else:
-		# 真实落刀承诺帧：身体深度前冲至 610px，刀刃切入玩家身前接触点 (x=474)！
-		var commit := smoothstep(0.68, 1.0, ratio)
-		weapon_pivot.rotation = lerpf(-2.22, 1.45, commit)
-		enemy_sprite.position.x = lerpf(1016.0, 610.0, commit)
-		enemy_sprite.rotation = lerpf(0.045, -0.18, commit)
-	attack_trail.visible = (ratio > 0.74 and ratio < 0.96)
+		# 真实落刀爆发冲刺 (最后 340ms 突进，击中玩家接触点)
+		var strike_progress := (ratio - 0.82) / 0.18
+		var snap := ease(clampf(strike_progress, 0.0, 1.0), 0.25)
+		weapon_pivot.rotation = lerpf(-2.25, 1.40, snap)
+		enemy_sprite.position.x = lerpf(1020.0, 580.0, snap)
+		enemy_sprite.rotation = lerpf(0.04, -0.16, snap)
+
+	attack_trail.visible = (ratio > 0.80 and ratio < 0.98)
 	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-180, 50)])
 	attack_trail.position = enemy_sprite.position + Vector2(-40, -10)
-	attack_trail.rotation = -0.25 # 向左前下方斩切，消除右侧竖直异常光柱
+	attack_trail.rotation = -0.25
 	attack_trail.width = 14.0
 	attack_trail.default_color = Color("fff1bd")
-	attack_trail.modulate.a = clampf((ratio - 0.74) / 0.12, 0.0, 0.85)
+	attack_trail.modulate.a = clampf((ratio - 0.80) / 0.10, 0.0, 0.85)
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
@@ -305,28 +310,24 @@ func _strike_combo(ratio: float) -> void:
 	var idx: int = clampi(s.strike_index, 0, strikes.size() - 1)
 	var strike_time := float(strikes[idx])
 	var start_time := 0.0 if idx == 0 else float(strikes[idx - 1])
-	var reach := 430.0 + 30.0 * float(idx) # 冲刺至 x=576，刀刃切入接触点
 	var phase := clampf((s.attack_elapsed - start_time) / (strike_time - start_time), 0.0, 1.0)
-	var commit := clampf((phase - 0.56) / 0.44, 0.0, 1.0)
-	if phase < 0.56:
-		weapon_pivot.rotation = lerpf(0.35 if s.strike_index > 0 else -0.45, -1.62, smoothstep(0.0, 0.56, phase))
+	
+	# 快刀节奏：前 70% 蓄力，后 30% 爆发下劈
+	if phase < 0.70:
+		var raise := smoothstep(0.0, 0.70, phase)
+		weapon_pivot.rotation = lerpf(0.35 if s.strike_index > 0 else -0.45, -1.75, raise)
+		enemy_sprite.position.x = lerpf(1006.0, 1015.0, raise)
+		enemy_sprite.rotation = 0.02
 	else:
-		weapon_pivot.rotation = lerpf(-1.62, 1.15, smoothstep(0.0, 1.0, commit))
-	enemy_sprite.position.x = 1006.0 - sin(commit * PI) * reach
-	enemy_sprite.rotation = -sin(commit * PI) * 0.085
-	var time_to_hit := strike_time - s.attack_elapsed
-	attack_trail.visible = time_to_hit <= 0.13 and time_to_hit >= -0.05
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-160, 40)])
-	attack_trail.position = enemy_sprite.position + Vector2(-30, -10)
-	attack_trail.rotation = -0.2
-	attack_trail.width = 12.0
-	attack_trail.default_color = PresentationCatalog.MOVE_PRESENTATION[String(s.current_intent.id)].color.lightened(0.35)
-	attack_trail.modulate.a = 0.75
+		var snap := ease((phase - 0.70) / 0.30, 0.3)
+		weapon_pivot.rotation = lerpf(-1.75, 1.25, snap)
+		enemy_sprite.position.x = lerpf(1015.0, 560.0, snap)
+		enemy_sprite.rotation = lerpf(0.02, -0.12, snap)
+		
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 
 func _green_grab(ratio: float) -> void:
-	attack_trail.visible = false
 	if ratio < 0.42:
 		var fake_raise := smoothstep(0.0, 0.42, ratio)
 		weapon_pivot.rotation = lerpf(-0.45, -2.02, fake_raise)
@@ -340,12 +341,13 @@ func _green_grab(ratio: float) -> void:
 		ghost_hand.position = enemy_sprite.position + Vector2(-6, -8)
 		ghost_hand.scale = Vector2(0.55, 0.8)
 	else:
-		# 鬼手探出直达玩家胸膛！
-		var reach := smoothstep(0.60, 1.0, ratio)
+		# 鬼手爆发探出
+		var reach_prog := (ratio - 0.60) / 0.40
+		var snap := ease(reach_prog, 0.4)
 		weapon_pivot.rotation = -0.20
-		enemy_sprite.position.x = lerpf(1006.0, 780.0, reach)
-		enemy_sprite.rotation = lerpf(-0.02, -0.09, reach)
+		enemy_sprite.position.x = lerpf(1006.0, 760.0, snap)
+		enemy_sprite.rotation = lerpf(-0.02, -0.09, snap)
 		ghost_hand.visible = true
-		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + Vector2(-540, -18), reach)
-		ghost_hand.scale = Vector2(lerpf(0.55, 1.3, reach), lerpf(0.8, 1.0, reach))
+		ghost_hand.position = enemy_sprite.position.lerp(enemy_sprite.position + Vector2(-540, -18), snap)
+		ghost_hand.scale = Vector2(lerpf(0.55, 1.3, snap), lerpf(0.8, 1.0, snap))
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)

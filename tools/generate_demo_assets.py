@@ -64,10 +64,9 @@ def make_background() -> None:
         draw.line((x0 - 70, y0 + 23, x1 + 73, y0 + 23), fill="#252329", width=10)
         for wx in range(x0 + 72, x1 - 40, 145):
             draw.rectangle((wx, y0 + 96, wx + 52, y0 + 154), fill=(100, 70, 39, 80), outline="#272127", width=4)
-    # Signboards and hanging cloth.
+    # Signboards and hanging cloth on the far left only
     draw.rectangle((222, 350, 299, 559), fill="#21161a", outline="#6f3a2c", width=6)
     draw.line((260, 322, 260, 350), fill="#685039", width=8)
-    draw.rectangle((1463, 407, 1570, 585), fill="#17252a", outline="#385357", width=5)
     # Wet road.
     draw.polygon([(0, 728), (1920, 728), (1920, 1080), (0, 1080)], fill="#101318")
     for _ in range(95):

@@ -102,10 +102,9 @@ def generate_scene_layers():
             d2.rectangle((wx, y0 + 90, wx + 48, y0 + 145), fill=(120, 75, 35, 90), outline=(32, 26, 24, 255), width=4)
             d2.line([(wx + 24, y0 + 90), (wx + 24, y0 + 145)], fill=(32, 26, 24, 255), width=3)
     
-    # Wooden signboards hanging
+    # Wooden signboards hanging on the far left side only
     d2.rectangle((210, 360, 280, 560), fill=(28, 18, 16, 255), outline=(100, 48, 36, 255), width=5)
     d2.line([(245, 330), (245, 360)], fill=(80, 60, 40, 255), width=6)
-    d2.rectangle((1440, 410, 1530, 580), fill=(20, 30, 35, 255), outline=(48, 75, 80, 255), width=5)
     
     l2 = add_fine_noise(l2, 14, 16)
     l2.save(ENV_DIR / "bg_layer2_mid_buildings.png", optimize=True)
