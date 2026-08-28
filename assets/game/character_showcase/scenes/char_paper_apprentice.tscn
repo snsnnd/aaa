@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3 uid="uid://char_show_paper_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/procedural_character_anim.gd" id="1_anim"]
+[ext_resource type="Texture2D" path="res://assets/game/enemies/paper_apprentice.png" id="2_tex"]
+
+[node name="CharPaperApprentice" type="Node2D"]
+script = ExtResource("1_anim")
+character_personality = 3
+
+[node name="Shadow" type="Polygon2D" parent="."]
+position = Vector2(0, 190)
+scale = Vector2(1.1, 0.35)
+color = Color(0, 0, 0, 0.3)
+polygon = PackedVector2Array(-75, 0, -50, -16, 0, -22, 50, -16, 75, 0, 50, 16, 0, 22, -50, 16)
+
+[node name="Body" type="Sprite2D" parent="."]
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_tex")

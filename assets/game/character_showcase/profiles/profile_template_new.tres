@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_template_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "custom_character_template"
+display_name = "新角色通用模板"
+motion_notes = "复制本文件并修改参数，即可零代码接入任意新怪物与角色的个性化动效"
+motion_type = 0
+breath_speed = 2.2
+breath_height = 3.5
+squash_stretch = 0.018
+idle_tilt_angle = 0.01
+jitter_speed = 0.0
+jitter_amount_x = 0.0
+prop_sway_freq = 2.2
+prop_sway_angle = 0.08
+prop_lag_phase = 0.4
+cadence_beats = 4
+step_lift_height = 0.0
+attack_windup_px = 35.0
+attack_lunge_px = 60.0
+hit_recoil_px = 30.0
+hit_tilt_rad = 0.08
+shadow_sync = true
+aura_pulse_speed = 2.0
+aura_scale_range = Vector2(1, 1.2)

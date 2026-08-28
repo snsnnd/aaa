@@ -1,0 +1,193 @@
+[gd_scene load_steps=3 format=3 uid="uid://char_showcase_main_02"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/character_animation_showcase.gd" id="1_showcase"]
+[ext_resource type="Texture2D" path="res://assets/demo/background_old_street.png" id="2_bg"]
+
+[node name="CharacterAnimationShowcase" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_showcase")
+
+[node name="Stage" type="Node2D" parent="."]
+
+[node name="DarkStudioBG" type="ColorRect" parent="Stage"]
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.06, 0.07, 0.09, 1)
+
+[node name="OldStreetBG" type="TextureRect" parent="Stage"]
+visible = false
+offset_right = 1280.0
+offset_bottom = 720.0
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CharacterContainer" type="Node2D" parent="Stage"]
+position = Vector2(760, 360)
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="Panel" parent="UI"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 350.0
+offset_bottom = 704.0
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "✦ 角色时间线状态机展厅"
+horizontal_alignment = 1
+
+[node name="InfoLabel" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.4, 1)
+theme_override_font_sizes/font_size = 13
+text = "【当前角色】: 执灯人 (玩家)"
+
+[node name="DescLabel" type="Label" parent="UI/Panel/VBox"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
+theme_override_font_sizes/font_size = 11
+text = "【动效特征】: 沉稳深呼吸律动、手提灯笼受重力摆动"
+autowrap_mode = 2
+
+[node name="StateLabel" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.9, 0.6, 1)
+theme_override_font_sizes/font_size = 12
+text = "当前状态: [IDLE] (阶段: idle)"
+
+[node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ActionTitle" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "敌招阶段机驱动 (Move Timeline Phases):"
+
+[node name="PhaseGrid" type="GridContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+columns = 4
+
+[node name="BtnIdle" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "待机"
+
+[node name="BtnRaise" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.75, 0.4, 1)
+text = "抬刀"
+
+[node name="BtnHold" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.45, 0.45, 1)
+text = "慢刀停"
+
+[node name="BtnCommit" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 0.25, 0.25, 1)
+text = "落刀"
+
+[node name="BtnRecover" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "收招"
+
+[node name="BtnStagger" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.4, 0.85, 0.95, 1)
+text = "凝滞"
+
+[node name="BtnHit" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "受击"
+
+[node name="BtnDeath" type="Button" parent="UI/Panel/VBox/PhaseGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "消散"
+
+[node name="HSeparator2" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="BGToggle" type="CheckBox" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "雨夜老街背景切换"
+
+[node name="SpeedRow" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="SpeedLabel" type="Label" parent="UI/Panel/VBox/SpeedRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "运行倍速: "
+
+[node name="SpeedSlider" type="HSlider" parent="UI/Panel/VBox/SpeedRow"]
+layout_mode = 3
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.2
+max_value = 2.0
+step = 0.1
+value = 1.0
+
+[node name="SpeedVal" type="Label" parent="UI/Panel/VBox/SpeedRow"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "1.0x"
+horizontal_alignment = 2
+
+[node name="HSeparator3" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ListTitle" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "角色列表 (切换测试):"
+
+[node name="Scroll" type="ScrollContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CharList" type="VBoxContainer" parent="UI/Panel/VBox/Scroll"]
+layout_mode = 3
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnIdle" to="." method="_on_idle_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnRaise" to="." method="_on_raise_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnHold" to="." method="_on_hold_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnCommit" to="." method="_on_commit_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnRecover" to="." method="_on_recover_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnStagger" to="." method="_on_stagger_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnHit" to="." method="_on_hit_pressed"]
+[connection signal="pressed" from="UI/Panel/VBox/PhaseGrid/BtnDeath" to="." method="_on_death_pressed"]
+[connection signal="toggled" from="UI/Panel/VBox/BGToggle" to="." method="_on_bg_toggle_toggled"]
+[connection signal="value_changed" from="UI/Panel/VBox/SpeedRow/SpeedSlider" to="." method="_on_speed_slider_value_changed"]

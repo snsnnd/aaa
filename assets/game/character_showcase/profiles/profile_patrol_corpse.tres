@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_corpse_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "patrol_corpse"
+display_name = "更练尸"
+motion_notes = "机械僵硬4拍巡更步态、卡点停顿、手持铜锣僵持"
+motion_type = 2
+breath_speed = 2.4
+breath_height = 0.0
+squash_stretch = 0.0
+idle_tilt_angle = 0.02
+jitter_speed = 0.0
+jitter_amount_x = 0.0
+prop_sway_freq = 2.0
+prop_sway_angle = 0.03
+prop_lag_phase = 0.0
+cadence_beats = 4
+step_lift_height = 7.0
+attack_windup_px = 25.0
+attack_lunge_px = 65.0
+hit_recoil_px = 22.0
+hit_tilt_rad = 0.05
+shadow_sync = true
+aura_pulse_speed = 1.5
+aura_scale_range = Vector2(1, 1.1)

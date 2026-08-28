@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_gambler_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "gambler_ghost"
+display_name = "赌鬼"
+motion_notes = "神经质高频横向抽搐、骨牌骰蛊剧烈震颤、狂热不稳步态"
+motion_type = 6
+breath_speed = 3.2
+breath_height = 4.0
+squash_stretch = 0.02
+idle_tilt_angle = 0.05
+jitter_speed = 28.0
+jitter_amount_x = 2.5
+prop_sway_freq = 12.0
+prop_sway_angle = 0.18
+prop_lag_phase = 0.1
+cadence_beats = 4
+step_lift_height = 0.0
+attack_windup_px = 35.0
+attack_lunge_px = 85.0
+hit_recoil_px = 45.0
+hit_tilt_rad = 0.16
+shadow_sync = true
+aura_pulse_speed = 4.0
+aura_scale_range = Vector2(1, 1.25)
