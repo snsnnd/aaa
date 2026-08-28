@@ -12,6 +12,7 @@
 | [story_bible.md](story_bible.md) | 世界观：轮回之秤/执灯人/三色怨气（嗔痴疑） | v0.1 已定稿 |
 | [DEMO.md](DEMO.md) | 基础战斗 Demo 操作与验证范围 | 可运行 |
 | [CARD_ACQUISITION.md](CARD_ACQUISITION.md) | 战斗内抽牌循环与战后怨契三选一 | v0.1 已定稿 |
+| [GAME_FEEL_RESEARCH.md](GAME_FEEL_RESEARCH.md) | 对标游戏手感调研（只狼/九日/匹诺曹/Eden 等）与补强路线 | 调研完成 2026-08-29 |
 | [STS2_CODE_RESEARCH.md](STS2_CODE_RESEARCH.md) | 杀戮尖塔 2 代码架构研究与本项目启示 | 研究快照 2026-08-27 |
 
 ## 一句话概念
