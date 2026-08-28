@@ -61,50 +61,57 @@ func _on_frame() -> void:
 				timer = 0.0
 				
 		1:
-			# Step 2: Watchman raises red attack, wait for commit window @ 2.70s
+			# Step 2: Watchman raises red attack, wait for commit window @ 2.72s
 			if sim.attack_elapsed >= 2.72 and sim.state == BattleSimulation.BattleState.WINDUP:
 				print("[2/6] 识破前任更夫【赤·嗔 慢刀】：在 2.72s 完美时机按下 Space 弹反！")
 				main_script._submit({"type": "defend"})
-				_capture("02_perfect_parry_burst.png")
 				test_phase = 2
 				timer = 0.0
 				
 		2:
-			# Step 3: Enemy is now in Stagger window. Play 《还刃》 (shatter) for bonus damage!
-			if timer > 0.2:
-				print("[3/6] 敌方大破绽僵直中！打出《还刃》，触发乘势加成 (12+6=18 伤害)！")
-				main_script._submit({"type": "play_card", "id": "shatter"})
-				_capture("03_shatter_counter_slash.png")
+			# Step 3: Enemy hits at 2.80s -> Perfect Parry feedback triggered! Capture 8-layer burst
+			if sim.was_last_perfect or sim.points >= 2:
+				print("  -> 触发【完美弹反】：120ms Hit-stop + 8层白金切刃冲击波爆发！")
+				_capture("02_perfect_parry_burst.png")
 				test_phase = 3
 				timer = 0.0
 				
 		3:
-			# Step 4: Next enemy turn - Blue combo. Parry and play 《镇煞》 (guard)
-			if sim.current_intent.id == "blue" and sim.attack_elapsed >= 0.78:
-				print("[4/6] 敌方出招【变拍二连】：第一拍完美接刀！")
-				main_script._submit({"type": "defend"})
+			# Step 4: Enemy is now in Stagger window. Play 《还刃》 (shatter) for bonus damage!
+			if timer > 0.15:
+				print("[3/6] 敌方大破绽僵直中！打出《还刃》，触发乘势加成 (12+6=18 伤害)！")
+				main_script._submit({"type": "play_card", "id": "shatter"})
+				_capture("03_shatter_counter_slash.png")
 				test_phase = 4
 				timer = 0.0
 				
 		4:
+			# Step 5: Next enemy turn - Blue combo. Parry and play 《镇煞》 (guard)
+			if sim.current_intent.id == "blue" and sim.attack_elapsed >= 0.78:
+				print("[4/6] 敌方出招【变拍二连】：第一拍完美接刀！")
+				main_script._submit({"type": "defend"})
+				test_phase = 5
+				timer = 0.0
+				
+		5:
 			# Play Guard (镇煞)
 			if timer > 0.2 and sim.points >= 2:
 				print("[5/6] 消耗 2 点还愿打出《镇煞》，触发冷青八卦收束阵并定身敌人！")
 				main_script._submit({"type": "play_card", "id": "guard"})
 				_capture("04_seal_ring_ward.png")
-				test_phase = 5
+				test_phase = 6
 				timer = 0.0
 				
-		5:
+		6:
 			# Play Shift (续灯) to restore oil
 			if timer > 0.3 and sim.points >= 2:
 				print("[6/6] 打出《续灯》，命火余烬升腾，恢复 7 点灯油！")
 				main_script._submit({"type": "play_card", "id": "shift"})
 				_capture("05_soul_embers_heal.png")
-				test_phase = 6
+				test_phase = 7
 				timer = 0.0
 				
-		6:
+		7:
 			# Finish off enemy with final attacks to test death dissolve
 			if timer > 0.2 and sim.points >= 1 and sim.enemy_hp > 0:
 				main_script._submit({"type": "play_card", "id": "attack"})
