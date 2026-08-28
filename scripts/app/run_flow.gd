@@ -7,9 +7,9 @@ extends Node
 enum State { MENU, MAP, BATTLE, REWARD, REST, EVENT, SHOP, GAME_OVER }
 
 const TRANSITIONS := {
-	State.MENU: [State.MENU, State.MAP],
+	State.MENU: [State.MENU, State.MAP, State.BATTLE, State.REST, State.EVENT, State.SHOP],
 	State.MAP: [State.MAP, State.BATTLE, State.REST, State.EVENT, State.SHOP, State.GAME_OVER],
-	State.BATTLE: [State.REWARD, State.GAME_OVER, State.MAP],
+	State.BATTLE: [State.REWARD, State.GAME_OVER, State.MAP, State.MENU],
 	State.REWARD: [State.MAP],
 	State.REST: [State.MAP],
 	State.EVENT: [State.MAP],
@@ -156,7 +156,22 @@ func _continue_run() -> void:
 	run = RunStateScript.new()
 	run.from_dict(data)
 	Telemetry.start_run(run.seed_value, run.difficulty)
-	_enter(State.MAP)
+	# 断点续战：未完成的节点不允许借"退出重进"跳过
+	match String(run.node_state):
+		"in_progress":
+			match String(run.current_node.get("type", "battle")):
+				"battle", "elite", "boss":
+					_enter(State.BATTLE)
+				"rest":
+					_enter(State.REST)
+				"event":
+					_enter(State.EVENT)
+				"shop":
+					_enter(State.SHOP)
+				_:
+					_enter(State.MAP)
+		_:
+			_enter(State.MAP)
 
 
 func _save_run() -> void:
@@ -182,6 +197,7 @@ func _on_node_picked(row: int, col: int) -> void:
 	run.current_node = node
 	run.node_row = row
 	run.node_col = col
+	run.node_state = "in_progress"
 	Telemetry.record_node(String(node.get("type", "battle")), String(node.get("enemy", "")), row)
 	match String(node.get("type", "battle")):
 		"battle", "elite", "boss":
@@ -199,6 +215,7 @@ func _on_node_picked(row: int, col: int) -> void:
 
 
 func _grant_treasure() -> void:
+	run.node_state = "done"
 	var rng_gen := run.rng()
 	if run.relics.size() < 4 and rng_gen.randf() < 0.6:
 		var all_relics: Array[String] = []
@@ -234,6 +251,8 @@ func _show_battle() -> void:
 		mods["enemy_dmg_mul"] = float(mods.get("enemy_dmg_mul", 1.0)) * 1.1
 	mods["reaction_assist"] = GameSettings.reaction_assist
 	mods["flags"] = run.flags
+	# 全 Run 确定性：战斗 RNG 由 Run 种子 + 节点位置派生
+	mods["battle_seed"] = hash([run.seed_value, run.node_row, run.node_col])
 	battle.apply_run_config(enemy_id, run.deck, run.hp, mods)
 	for ev: Dictionary in battle.sim.drain_begin_events():
 		battle._handle_event(ev)
@@ -266,10 +285,11 @@ func _finish_battle(victory: bool) -> void:
 			run.max_hp += gained
 		run.battle_count += 1
 		var node_type := String(run.current_node.get("type", "battle"))
-		var base_gold := 12 + (run.node_row * 2) + (randi() % 9)
+		var battle_mods := run.mods()
+		var base_gold := 12 + (run.node_row * 2) + run.rng().randi_range(0, 8)
 		if node_type == "elite":
 			base_gold = int(float(base_gold) * 1.5)
-		pending_gold = int(round(float(base_gold) * float(run.mods().get("gold_mul", 1.0)))) + (8 if run.has_relic("silver_coin") else 0)
+		pending_gold = int(round(float(base_gold) * float(battle_mods.get("gold_mul", 1.0)))) + int(battle_mods.get("gold_bonus", 0))
 		run.gold += pending_gold
 	else:
 		run.hp = s.player_hp
@@ -322,6 +342,7 @@ func _on_reward_skipped() -> void:
 
 
 func _after_node() -> void:
+	run.node_state = "done"
 	_save_run()
 	_enter(State.MAP)
 
@@ -338,9 +359,12 @@ func _on_rest_choice(kind: String, payload: String) -> void:
 
 
 func _show_event() -> void:
-	_pending_event_id = String(run.current_node.get("enemy", ""))
+	# 事件 id 持久化：断线重进时看到的是同一个事件，不存在"刷事件"漏洞
+	_pending_event_id = String(run.current_node.get("event_id", ""))
 	if _pending_event_id == "":
 		_pending_event_id = _pick_event()
+		run.current_node["event_id"] = _pending_event_id
+		_save_run()
 	var ev: Dictionary = BattleSimulationScript.ContentCatalog.EVENTS.get(_pending_event_id, {})
 	event_screen.show_event(_pending_event_id, ev)
 

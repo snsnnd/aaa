@@ -39,14 +39,16 @@ func hp_of() -> int:
 
 
 ## 当前阶段（Boss 按血量切换；普通敌人恒 -1）。
+## 必须取"最深"的已越过阈值：血量低于 33% 时应处于收灯阶段而非撕灯。
 func current_phase() -> int:
 	var phases: Array = enemy_def().get("phases", [])
 	if phases.is_empty():
 		return -1
+	var phase := -1
 	for i in phases.size():
 		if enemy_hp <= int(enemy_def().hp) * float(phases[i]["below"]):
-			return i
-	return -1
+			phase = i
+	return phase
 
 
 ## 返回阶段切换事件；未切换返回 []。

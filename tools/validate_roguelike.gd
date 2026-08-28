@@ -23,6 +23,10 @@ func _init() -> void:
 	_check_enemy_traits()
 	_check_boss_phases()
 	_check_wenlu_scry()
+	_check_effect_floats()
+	_check_boss_phase_order()
+	_check_battle_seed_determinism()
+	_check_wiring_audit()
 	_check_save_roundtrip()
 	_check_telemetry()
 
@@ -169,23 +173,112 @@ func _check_enemy_traits() -> void:
 		if String(ev.get("type", "")) == "dice_roll":
 			has_dice = true
 	_check("trait_dice_roll", has_dice, str(begin_events))
-	# 拖拽：井姐 unblockable 命中拉牌
+	# 拖拽：井姐 unblockable 命中拉牌（确定性构造：直接注入沉井拖拽意图）
 	var sim4 := BattleSimulationScript.new()
 	sim4.enemy_id = "well_sisters"
 	sim4.deck_config = Array(["attack", "attack", "shatter", "guard", "shift"], TYPE_STRING, "", null)
 	sim4.restart()
-	sim4.attack_elapsed = 999.0
-	var hand_before := sim4.hand.duplicate()
-	sim4.step(0.016)
-	sim4.hand = Array(hand_before, TYPE_STRING, "", null)
+	sim4.current_intent = BattleSimulationScript.MOVES["sisters_drag"].duplicate()
+	sim4.attack_elapsed = 1.99  # 一步跨过 2.0s 命中点
 	var pulled := false
-	var tries := 0
-	while tries < 240 and not pulled:
-		tries += 1
-		for ev in sim4.step(1.0 / 60.0):
-			if String(ev.get("type", "")) == "card_pulled":
-				pulled = true
-	_check("trait_pull_discards", pulled or tries >= 240, "frames=%d" % tries)
+	var pulled_id := ""
+	for ev in sim4.step(1.0 / 60.0):
+		if String(ev.get("type", "")) == "card_pulled":
+			pulled = true
+			pulled_id = String(ev.get("id", ""))
+	# 注意：finish_action 会补牌，所以验证"被拉走的牌进了弃牌堆"而不是手牌数量
+	_check("trait_pull_discards", pulled and pulled_id != "" and sim4.discard_pile.has(pulled_id),
+		"pulled=%s" % pulled_id)
+	# 记仇：防范失误后下一招 vengeance_bonus=6
+	var sim5 := BattleSimulationScript.new()
+	sim5.enemy_id = "mortuary_warden"
+	sim5.restart()
+	sim5.ai.last_defense_missed = false
+	sim5.attack_elapsed = 0.1
+	sim5.submit({"type": "defend"})  # 过早 → miss
+	sim5.defense_cooldown = 0.0
+	sim5._finish_action([])
+	sim5.attack_index += 1
+	sim5._begin_attack()
+	_check("trait_vengeance_armed", int(sim5.current_intent.get("vengeance_bonus", 0)) == 6,
+		str(sim5.current_intent.get("vengeance_bonus", -1)))
+	# 红绳遗物：首误豁免冷却，第二误仍进入冷却
+	var sim6 := BattleSimulationScript.new()
+	sim6.run_mods = {"first_miss_free": true}
+	sim6.restart()
+	sim6.attack_elapsed = 0.1
+	sim6.submit({"type": "defend"})
+	var first_free: bool = sim6.defense_cooldown == 0.0
+	sim6.attack_elapsed = 0.2
+	sim6.submit({"type": "defend"})
+	var second_cool: bool = sim6.defense_cooldown > 0.0
+	_check("relic_first_miss_free", first_free and second_cool,
+		"first_free=%s second_cool=%s" % [first_free, second_cool])
+	# 剧情旗标"纸人开脸"：纸胎甲 -5 → -2
+	var sim7 := BattleSimulationScript.new()
+	sim7.enemy_id = "paper_apprentice"
+	sim7.story_flags = {"paper_face_done": true}
+	sim7.restart()
+	sim7.points = 9
+	sim7.hand.clear()
+	sim7.hand.append("attack")
+	var hp_before7: int = sim7.enemy_hp
+	sim7.submit({"type": "play_card", "id": "attack"})
+	_check("flag_paper_face_done", sim7.enemy_hp == hp_before7 - 3, "dmg=%d" % (hp_before7 - sim7.enemy_hp))
+
+
+# ————————————————————— Effect 数值完整性 —————————————————————
+
+func _check_effect_floats() -> void:
+	# 凝滞类卡（0.2/0.25/0.35s）不允许被 int 截断成 0
+	var sim := BattleSimulationScript.new()
+	sim.restart()
+	for cid in ["difan", "zhuangzhong", "guard", "fuhunsuo"]:
+		sim.restart()
+		sim.points = 9
+		sim.hand.clear()
+		sim.hand.append(cid)
+		sim.submit({"type": "play_card", "id": cid})
+		_check("effect_stagger_%s" % cid, sim.stagger_remaining > 0.0,
+			"stagger=%.3f" % sim.stagger_remaining)
+	# 延灯：命中点整体后移 0.4s
+	var sim2 := BattleSimulationScript.new()
+	sim2.restart()
+	sim2.points = 9
+	sim2.hand.clear()
+	sim2.hand.append("yandeng")
+	var dur_before: float = float(sim2.current_intent.duration)
+	var strikes_before: Array = sim2.current_intent.get("strikes", []).duplicate()
+	sim2.submit({"type": "play_card", "id": "yandeng"})
+	var dur_after: float = float(sim2.current_intent.duration)
+	var ok_delay: bool = absf(dur_after - dur_before - 0.4) < 0.001
+	if not strikes_before.is_empty():
+		ok_delay = ok_delay and absf(float(sim2.current_intent["strikes"][0]) - float(strikes_before[0]) - 0.4) < 0.001
+	_check("effect_delay_impact", ok_delay, "dur %.2f→%.2f" % [dur_before, dur_after])
+
+
+# ————————————————————— Boss 阶段顺序 —————————————————————
+
+func _check_boss_phase_order() -> void:
+	var sim := BattleSimulationScript.new()
+	sim.enemy_id = "lantern_keeper"
+	sim.restart()
+	sim.enemy_hp = 5
+	sim._sync_ai()
+	_check("boss_phase_deep", sim.ai.current_phase() == 1, "phase=%d" % sim.ai.current_phase())
+
+
+# ————————————————————— 全 Run Seed 确定性 —————————————————————
+
+func _check_battle_seed_determinism() -> void:
+	var hands := []
+	for _i in 2:
+		var sim := BattleSimulationScript.new()
+		sim.run_mods = {"battle_seed": 777}
+		sim.enemy_id = "gambler_ghost"
+		sim.restart()
+		hands.append(var_to_str([sim.hand, sim.draw_pile, sim.enemy_hp]))
+	_check("battle_seed_determinism", hands[0] == hands[1], str(hands[0].length()))
 
 
 # ————————————————————— Boss 阶段 —————————————————————
@@ -214,7 +307,7 @@ func _check_boss_phases() -> void:
 		str(phase_event))
 	sim._sync_ai()
 	var moves_pool: Array = sim.ai.moves_of()
-	_check("boss_phase_moves", moves_pool.has("keeper_ash_rain") and moves_pool.has("boss_flame_domain"), str(moves_pool))
+	_check("boss_phase_moves", moves_pool.has("keeper_finale") and moves_pool.has("keeper_wick_snuff"), str(moves_pool))
 
 
 # ————————————————————— 问路 scry —————————————————————
@@ -237,6 +330,34 @@ func _check_wenlu_scry() -> void:
 		var pick: String = sim.scry_options[1]
 		sim.submit({"type": "scry_pick", "index": 1})
 		_check("wenlu_scry_pick", sim.hand.has(pick) and sim.scry_options.is_empty())
+
+
+# ————————————————————— 接线审计（防"数据定义了、代码没接"） —————————————————————
+
+func _check_wiring_audit() -> void:
+	# 规则层源码里必须真实出现每个遗物 mod 键 / 剧情旗标 / 特质的消费点
+	var sim_src := FileAccess.open("res://scripts/battle/battle_simulation.gd", FileAccess.READ).get_as_text()
+	var ai_src := FileAccess.open("res://scripts/battle/enemy_ai.gd", FileAccess.READ).get_as_text()
+	var flow_src := FileAccess.open("res://scripts/app/run_flow.gd", FileAccess.READ).get_as_text()
+	var combined := sim_src + "\n" + flow_src
+	var missing: Array[String] = []
+	for rid in ContentCatalog.RELICS:
+		for key in ContentCatalog.RELICS[rid]["mods"]:
+			if not combined.contains(key):
+				missing.append("relic:%s" % key)
+	var flags := ["paper_face_done", "dice_rigged", "well_blessing", "mourner_song"]
+	for flag in flags:
+		if not sim_src.contains(flag):
+			missing.append("flag:%s" % flag)
+	var traits := ["paper_armor", "skittish", "heavy", "tempo", "dice", "vengeance", "pull"]
+	for trait_id in traits:
+		if not ai_src.contains("\"%s\"" % trait_id):
+			missing.append("trait:%s" % trait_id)
+	var diff_keys := ["enemy_hp_mul", "enemy_dmg_mul", "gold_mul", "start_hp_penalty"]
+	for key in diff_keys:
+		if not combined.contains(key):
+			missing.append("diff:%s" % key)
+	_check("wiring_audit", missing.is_empty(), "missing=%s" % str(missing))
 
 
 # ————————————————————— 存档 —————————————————————

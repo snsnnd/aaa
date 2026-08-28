@@ -17,7 +17,8 @@ var flags: Dictionary = {}              # 剧情旗标（改变敌人规则/奖�
 var map: Dictionary = {}                # MapGenerator 产物
 var node_row := 0
 var node_col := 0
-var current_node: Dictionary = {}       # {type, enemy, id}
+var current_node: Dictionary = {}       # {type, enemy, id, event_id?}
+var node_state := "done"                # 节点状态：in_progress（战斗中/事件未选）| done
 var draft_history: Array[String] = []   # 遥测：三选一记录
 var battle_count := 0
 var shop_visited := false
@@ -43,6 +44,7 @@ func setup_new_run() -> void:
 	flags = {}
 	node_row = 0
 	node_col = 0
+	node_state = "done"
 	draft_history = []
 	battle_count = 0
 	shop_visited = false
@@ -136,6 +138,7 @@ func to_dict() -> Dictionary:
 		"deck": deck, "relics": relics, "flags": flags,
 		"map": map, "node_row": node_row, "node_col": node_col,
 		"current_node": current_node,
+		"node_state": node_state,
 		"draft_history": draft_history, "battle_count": battle_count,
 		"shop_visited": shop_visited,
 	}
@@ -156,6 +159,7 @@ func from_dict(data: Dictionary) -> void:
 	node_row = int(data.get("node_row", 0))
 	node_col = int(data.get("node_col", 0))
 	current_node = data.get("current_node", {})
+	node_state = String(data.get("node_state", "done"))
 	draft_history.assign(data.get("draft_history", []))
 	battle_count = int(data.get("battle_count", 0))
 	shop_visited = bool(data.get("shop_visited", false))

@@ -159,3 +159,13 @@
 - 问路：实装真正的"牌堆顶看三选一"（scry_offer/scry_pick），与 CONTENT_DESIGN 规格一致。
 - content_hash 覆盖全部玩法字段（卡牌效果/招式机制字段/敌人特质与阶段/遗物/难度）。
 - 新增 `tools/validate_roguelike.gd`（24 项：地图连通性/Seed 确定性/存档往返/效果系统/特质/Boss 阶段/问路/遥测）。
+
+### D28: 一致性审计修复（"系统声明 ≠ 实际生效"专项）✅
+- **Effect 小数截断（P0）**：`_apply_effect` 统一 `int(amount)` 导致凝滞 0.2/0.25/0.35/0.5s 与延灯 0.4s 全部被截为 0。改为 float 读取（`amt`），并新增 5 项数值回归测试。
+- **Boss 阶段判断（P0）**：`current_phase` 取首个命中阈值（66%），血量 <33% 时永远进不了收灯阶段。改为取最深已越过阈值。
+- **断线接线补全**：记仇（`last_defense_missed` 此前从未写入）、红绳遗物（首误豁免冷却，`_register_miss` 统一登记）、纸人开脸（纸胎甲 -5→-2）全部接入战斗规则。
+- **Continue 跳战斗漏洞**：RunState 新增 `node_state`（in_progress/done），战斗开始即落盘；继续游戏时未完成节点原地恢复（战斗重开/事件重看/商店重进），事件 id 持久化防"刷事件"。
+- **状态机转移表**：补 `BATTLE→MENU`（离开夜巡）与 `MENU→BATTLE/REST/EVENT/SHOP`（断点续战），消除非法转移断言。
+- **全 Run Seed 管线**：战斗种子由 `hash([run_seed, row, col])` 派生（经 run_mods 传入），`randi()` 全局随机清零（战后金币改 run.rng）；相同 Seed 地图+战斗初始状态完全可复现。
+- **实现级自动校验**：validate_roguelike 新增 `wiring_audit`——遍历遗物 mods / 剧情旗标 / 敌人特质 / 难度键，断言规则层源码存在真实消费点（首跑即抓到 silver_coin 硬编码）。另修 trait_pull 测试假阳性（超时也算过 → 现在断言弃牌堆归属）。
+- 验证基线：roguelike 35/35，冒烟/三构筑/playtest 回归通过。

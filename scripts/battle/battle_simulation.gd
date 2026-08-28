@@ -162,7 +162,11 @@ func restart(hp: int = -1) -> void:
 	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
-	battle_seed = 20260828 + battle_generation
+	# Seed 管线：RunFlow 传入 battle_seed 时完全由 Run 种子派生；否则用默认偏移（demo/独立战斗）
+	if run_mods.has("battle_seed"):
+		battle_seed = int(_mod("battle_seed", 0)) + battle_generation
+	else:
+		battle_seed = 20260828 + battle_generation
 	rng_state = battle_seed
 	ai.setup(enemy_id)
 	ai.rng_state = battle_seed ^ 0x5bf03635
@@ -371,7 +375,7 @@ func _attempt_defense() -> Array:
 			_log_defense("基础镇煞")
 			events.append({"type": "basic_dispel"})
 		else:
-			defense_cooldown = MISS_COOLDOWN
+			_register_miss(events, true)
 			_log_defense("未处理鬼手")
 			events.append({"type": "defense_miss", "unblockable": true, "reason": "points"})
 		return events
@@ -387,11 +391,21 @@ func _attempt_defense() -> Array:
 	elif time_to_impact < 0.0 and time_to_impact >= -SUCCESS_GRACE:
 		queued_defense = DefenseGrade.SUCCESS
 	else:
-		defense_cooldown = MISS_COOLDOWN
+		_register_miss(events, false)
 		events.append({"type": "defense_miss"})
 		return events
 	events.append({"type": "defense_queued", "grade": queued_defense})
 	return events
+
+
+## 防范失误统一登记：红绳遗物首误豁免冷却；义庄看守记仇。
+func _register_miss(events: Array, _unblockable: bool) -> void:
+	if bool(_mod("first_miss_free", false)) and not _first_miss_used:
+		_first_miss_used = true
+		events.append({"type": "miss_forgiven"})
+	else:
+		defense_cooldown = MISS_COOLDOWN
+	ai.last_defense_missed = true
 
 
 ## 兼容旧接口：反应式权重查询（冒烟测试使用）。
@@ -502,7 +516,11 @@ func _break_armor(events: Array) -> void:
 func _damage_enemy(amount: int, events: Array, from_card: bool) -> void:
 	var dealt := amount
 	if from_card:
-		dealt = maxi(1, amount + ai.card_damage_modifier())
+		var armor_mod := ai.card_damage_modifier()
+		# 剧情旗标"纸人开脸"：学徒纸胎甲减伤从 -5 降为 -2
+		if armor_mod != 0 and bool(story_flags.get("paper_face_done", false)):
+			armor_mod = -2
+		dealt = maxi(1, amount + armor_mod)
 	enemy_hp -= dealt
 	stats.damage_dealt = int(stats.get("damage_dealt", 0)) + dealt
 	if enemy_hp <= 0:
@@ -557,7 +575,9 @@ func _play_card(id: String) -> Array:
 
 
 func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:
-	var n := int(eff.get("amount", 0))
+	# amount 统一按 float 读取：0.2/0.35/0.5s 这类时间轴数值不能被 int 截断
+	var amt := float(eff.get("amount", 0.0))
+	var n := int(amt)
 	match String(eff.get("type", "")):
 		"damage":
 			var dmg := n
@@ -589,8 +609,8 @@ func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:
 			player_hp = maxi(1, player_hp - n)
 			events.append({"type": "card_played", "id": id, "self_damage": n})
 		"stagger":
-			if state == BattleState.WINDUP and n > 0.0:
-				var amount := float(n) * float(_mod("stagger_mul", 1.0))
+			if state == BattleState.WINDUP and amt > 0.0:
+				var amount := amt * float(_mod("stagger_mul", 1.0))
 				stagger_remaining = minf(STAGGER_CAP, stagger_remaining + amount)
 				events.append({"type": "stagger", "duration": amount})
 		"grab_cancel":
@@ -620,7 +640,7 @@ func _apply_effect(eff: Dictionary, id: String, events: Array) -> void:
 			current_intent.fake = -1.0
 			fake_released = true
 		"delay_impact":
-			var t := float(n)
+			var t := amt
 			if current_intent.has("strikes"):
 				var arr: Array = []
 				for s in current_intent.strikes:
