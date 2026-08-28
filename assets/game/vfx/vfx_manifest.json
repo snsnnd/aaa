@@ -1,0 +1,96 @@
+{
+  "version": "1.0.0",
+  "name": "aaa_game_vfx_assets",
+  "theme": "Eastern Folk Horror Painterly (手绘厚涂中式怪谈)",
+  "vfx_scenes": [
+    {
+      "id": "vfx_perfect_parry",
+      "path": "res://assets/game/vfx/scenes/vfx_perfect_parry.tscn",
+      "name": "完美弹反金光破煞",
+      "description": "8层规格弹反视觉大爆发：金白切刃、径向冲击波、水墨破裂与反向飞溅符纸火星",
+      "duration": 0.85
+    },
+    {
+      "id": "vfx_guard_arc",
+      "path": "res://assets/game/vfx/scenes/vfx_guard_arc.tscn",
+      "name": "防范金弧护盾",
+      "description": "执灯人举灯防范瞬间金光弧面与星芒闪耀",
+      "duration": 0.45
+    },
+    {
+      "id": "vfx_paper_burst",
+      "path": "res://assets/game/vfx/scenes/vfx_paper_burst.tscn",
+      "name": "斩纸 / 断念",
+      "description": "水墨刀光横切，符纸碎裂四散飞舞伴随墨气",
+      "duration": 0.55
+    },
+    {
+      "id": "vfx_counter_slash",
+      "path": "res://assets/game/vfx/scenes/vfx_counter_slash.tscn",
+      "name": "还刃 / 乘势交叉重斩",
+      "description": "双刃交叉重斩，炽热火星与烈焰余烬迸发",
+      "duration": 0.60
+    },
+    {
+      "id": "vfx_seal_ring",
+      "path": "res://assets/game/vfx/scenes/vfx_seal_ring.tscn",
+      "name": "镇煞 / 缚魂八卦法阵",
+      "description": "冷青道教八卦镇煞法阵向内聚敛定身，青芒粒子收束",
+      "duration": 0.80
+    },
+    {
+      "id": "vfx_bell_wave",
+      "path": "res://assets/game/vfx/scenes/vfx_bell_wave.tscn",
+      "name": "撞钟 / 听更音波环",
+      "description": "铜铃/铜钟共振冲击声波环向外扩散与微尘金星",
+      "duration": 0.65
+    },
+    {
+      "id": "vfx_soul_embers",
+      "path": "res://assets/game/vfx/scenes/vfx_soul_embers.tscn",
+      "name": "续灯 / 灯芯命火余烬",
+      "description": "暖橙色命火光晕扩散与袅袅上升的灵魂余烬",
+      "duration": 0.90
+    },
+    {
+      "id": "vfx_ghost_flame_burst",
+      "path": "res://assets/game/vfx/scenes/vfx_ghost_flame_burst.tscn",
+      "name": "幽冥鬼火预兆",
+      "description": "三色敌招起手幽冥磷火升腾（支持赤/碧/青意图调色）",
+      "duration": 0.75
+    },
+    {
+      "id": "vfx_hit_sparks",
+      "path": "res://assets/game/vfx/scenes/vfx_hit_sparks.tscn",
+      "name": "通用受击火花",
+      "description": "清脆方向性受击爆裂火星与闪光点",
+      "duration": 0.35
+    },
+    {
+      "id": "vfx_death_dissolve",
+      "path": "res://assets/game/vfx/scenes/vfx_death_dissolve.tscn",
+      "name": "超度消散魂火",
+      "description": "厉鬼超度或角色死亡时的升华魂光与漂浮纸灰",
+      "duration": 1.30
+    }
+  ],
+  "shaders": [
+    "res://assets/game/vfx/shaders/vfx_shockwave_distort.gdshader",
+    "res://assets/game/vfx/shaders/vfx_talisman_burn.gdshader",
+    "res://assets/game/vfx/shaders/vfx_ghost_aura.gdshader",
+    "res://assets/game/vfx/shaders/vfx_additive_glow.gdshader"
+  ],
+  "textures": [
+    "res://assets/game/vfx/textures/tex_spark_sharp.png",
+    "res://assets/game/vfx/textures/tex_slash_arc.png",
+    "res://assets/game/vfx/textures/tex_talisman_shard.png",
+    "res://assets/game/vfx/textures/tex_ink_splatter.png",
+    "res://assets/game/vfx/textures/tex_shockwave_ring.png",
+    "res://assets/game/vfx/textures/tex_seal_bagua.png",
+    "res://assets/game/vfx/textures/tex_bell_ripple.png",
+    "res://assets/game/vfx/textures/tex_ghost_flame.png",
+    "res://assets/game/vfx/textures/tex_ember_particle.png",
+    "res://assets/game/vfx/textures/tex_slash_cross.png",
+    "res://assets/game/vfx/textures/tex_noise_dissolve.png"
+  ]
+}

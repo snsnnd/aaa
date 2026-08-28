@@ -1,0 +1,195 @@
+[gd_scene load_steps=12 format=3 uid="uid://c8vfx_perf_parry_01"]
+
+[ext_resource type="Script" path="res://assets/game/vfx/scripts/vfx_standalone_emitter.gd" id="1_emitter"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_spark_sharp.png" id="2_spark"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_shockwave_ring.png" id="3_ring"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_ink_splatter.png" id="4_ink"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_talisman_shard.png" id="5_talisman"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_slash_cross.png" id="6_cross"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_add"]
+blend_mode = 1
+
+[sub_resource type="Curve" id="Curve_scale"]
+_data = [Vector2(0, 0.2), 0.0, 3.5, 0, 0, Vector2(0.2, 1.0), 0.0, 0.0, 0, 0, Vector2(1, 0.0), -1.8, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Gradient" id="Gradient_sparks"]
+offsets = PackedFloat32Array(0, 0.25, 0.7, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 0.92, 0.55, 1, 1, 0.58, 0.2, 0.85, 1, 0.3, 0.1, 0)
+
+[sub_resource type="Animation" id="Animation_play"]
+resource_name = "play"
+length = 0.85
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("FlashCore:scale")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.08, 0.35),
+"transitions": PackedFloat32Array(0.2, 1.8, 1),
+"update": 0,
+"values": [Vector2(0.3, 0.3), Vector2(1.5, 1.5), Vector2(0.1, 0.1)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("FlashCore:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.05, 0.35),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 1), Color(1, 0.95, 0.7, 1), Color(1, 0.8, 0.4, 0)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("ShockwaveRing:scale")
+tracks/2/interp = 2
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.45),
+"transitions": PackedFloat32Array(0.25, 1),
+"update": 0,
+"values": [Vector2(0.2, 0.2), Vector2(2.4, 2.4)]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("ShockwaveRing:modulate")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"times": PackedFloat32Array(0, 0.06, 0.45),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 0.2), Color(1, 0.92, 0.65, 0.95), Color(1, 0.8, 0.4, 0)]
+}
+tracks/4/type = "value"
+tracks/4/imported = false
+tracks/4/enabled = true
+tracks/4/path = NodePath("CrossSlash:scale")
+tracks/4/interp = 2
+tracks/4/loop_wrap = true
+tracks/4/keys = {
+"times": PackedFloat32Array(0, 0.07, 0.32),
+"transitions": PackedFloat32Array(0.18, 1.5, 1),
+"update": 0,
+"values": [Vector2(0.2, 0.2), Vector2(1.6, 1.6), Vector2(2.1, 2.1)]
+}
+tracks/5/type = "value"
+tracks/5/imported = false
+tracks/5/enabled = true
+tracks/5/path = NodePath("CrossSlash:modulate")
+tracks/5/interp = 1
+tracks/5/loop_wrap = true
+tracks/5/keys = {
+"times": PackedFloat32Array(0, 0.06, 0.32),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 1), Color(1, 0.9, 0.6, 1), Color(1, 0.7, 0.3, 0)]
+}
+tracks/6/type = "value"
+tracks/6/imported = false
+tracks/6/enabled = true
+tracks/6/path = NodePath("InkExplosion:scale")
+tracks/6/interp = 2
+tracks/6/loop_wrap = true
+tracks/6/keys = {
+"times": PackedFloat32Array(0, 0.12, 0.6),
+"transitions": PackedFloat32Array(0.3, 1.2, 1),
+"update": 0,
+"values": [Vector2(0.3, 0.3), Vector2(1.4, 1.4), Vector2(1.8, 1.8)]
+}
+tracks/7/type = "value"
+tracks/7/imported = false
+tracks/7/enabled = true
+tracks/7/path = NodePath("InkExplosion:modulate")
+tracks/7/interp = 1
+tracks/7/loop_wrap = true
+tracks/7/keys = {
+"times": PackedFloat32Array(0, 0.05, 0.35, 0.65),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Color(0, 0, 0, 0), Color(0.1, 0.12, 0.15, 0.95), Color(0.1, 0.12, 0.15, 0.7), Color(0.1, 0.12, 0.15, 0)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_vfx"]
+_data = {
+"play": SubResource("Animation_play")
+}
+
+[node name="VFXPerfectParry" type="Node2D"]
+z_index = 25
+script = ExtResource("1_emitter")
+duration = 0.85
+
+[node name="InkExplosion" type="Sprite2D" parent="."]
+modulate = Color(0.1, 0.12, 0.15, 0)
+scale = Vector2(0.3, 0.3)
+texture = ExtResource("4_ink")
+
+[node name="ShockwaveRing" type="Sprite2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("3_ring")
+
+[node name="CrossSlash" type="Sprite2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("6_cross")
+
+[node name="FlashCore" type="Sprite2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+scale = Vector2(0.3, 0.3)
+texture = ExtResource("2_spark")
+
+[node name="ParrySparks" type="CPUParticles2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+emitting = false
+amount = 26
+lifetime = 0.55
+one_shot = true
+explosiveness = 0.95
+texture = ExtResource("2_spark")
+emission_shape = 1
+emission_sphere_radius = 12.0
+spread = 180.0
+gravity = Vector2(0, 180)
+initial_velocity_min = 280.0
+initial_velocity_max = 560.0
+angular_velocity_min = -360.0
+angular_velocity_max = 360.0
+linear_accel_min = -200.0
+linear_accel_max = -100.0
+scale_amount_min = 0.08
+scale_amount_max = 0.24
+scale_amount_curve = SubResource("Curve_scale")
+color_ramp = SubResource("Gradient_sparks")
+
+[node name="TalismanDebris" type="CPUParticles2D" parent="."]
+emitting = false
+amount = 14
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.92
+texture = ExtResource("5_talisman")
+spread = 180.0
+gravity = Vector2(-80, 220)
+initial_velocity_min = 190.0
+initial_velocity_max = 380.0
+angular_velocity_min = -240.0
+angular_velocity_max = 240.0
+linear_accel_min = -120.0
+scale_amount_min = 0.1
+scale_amount_max = 0.22
+scale_amount_curve = SubResource("Curve_scale")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+"": SubResource("AnimationLibrary_vfx")
+}

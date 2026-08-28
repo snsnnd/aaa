@@ -1,0 +1,81 @@
+[gd_scene load_steps=9 format=3 uid="uid://c8vfx_soul_embers_01"]
+
+[ext_resource type="Script" path="res://assets/game/vfx/scripts/vfx_standalone_emitter.gd" id="1_emitter"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_ember_particle.png" id="2_ember"]
+[ext_resource type="Texture2D" path="res://assets/game/vfx/textures/tex_spark_sharp.png" id="3_spark"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_add"]
+blend_mode = 1
+
+[sub_resource type="Curve" id="Curve_scale"]
+_data = [Vector2(0, 0.2), 0.0, 3.0, 0, 0, Vector2(0.3, 1.0), 0.0, 0.0, 0, 0, Vector2(1, 0.0), -1.5, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="Animation" id="Animation_play"]
+resource_name = "play"
+length = 0.9
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("LanternHalo:scale")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.25, 0.8),
+"transitions": PackedFloat32Array(0.3, 1.3, 1),
+"update": 0,
+"values": [Vector2(0.5, 0.5), Vector2(1.5, 1.5), Vector2(0.8, 0.8)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("LanternHalo:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.25, 0.85),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 0.6, 0.2, 0.2), Color(1, 0.75, 0.35, 0.85), Color(1, 0.5, 0.1, 0)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_vfx"]
+_data = {
+"play": SubResource("Animation_play")
+}
+
+[node name="VFXSoulEmbers" type="Node2D"]
+z_index = 20
+script = ExtResource("1_emitter")
+duration = 0.9
+
+[node name="LanternHalo" type="Sprite2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("3_spark")
+
+[node name="RisingEmbers" type="CPUParticles2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")
+emitting = false
+amount = 22
+lifetime = 0.85
+one_shot = true
+explosiveness = 0.6
+texture = ExtResource("2_ember")
+emission_shape = 2
+emission_rect_extents = Vector2(40, 20)
+spread = 45.0
+gravity = Vector2(0, -160)
+initial_velocity_min = 60.0
+initial_velocity_max = 140.0
+angular_velocity_min = -180.0
+angular_velocity_max = 180.0
+scale_amount_min = 0.08
+scale_amount_max = 0.22
+scale_amount_curve = SubResource("Curve_scale")
+color = Color(1, 0.68, 0.25, 0.95)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+"": SubResource("AnimationLibrary_vfx")
+}

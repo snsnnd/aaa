@@ -1,0 +1,180 @@
+[gd_scene load_steps=3 format=3 uid="uid://c8vfx_gallery_01"]
+
+[ext_resource type="Script" path="res://assets/game/vfx/vfx_preview_gallery.gd" id="1_gallery"]
+[ext_resource type="Texture2D" path="res://assets/demo/background_old_street.png" id="2_bg"]
+
+[node name="VFXPreviewGallery" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_gallery")
+
+[node name="DarkBase" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.05, 0.06, 0.08, 1)
+
+[node name="Background" type="TextureRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Crosshair" type="Node2D" parent="."]
+position = Vector2(760, 360)
+
+[node name="LineH" type="Line2D" parent="Crosshair"]
+points = PackedVector2Array(-25, 0, 25, 0)
+width = 1.0
+default_color = Color(0.4, 0.45, 0.5, 0.3)
+
+[node name="LineV" type="Line2D" parent="Crosshair"]
+points = PackedVector2Array(0, -25, 0, 25)
+width = 1.0
+default_color = Color(0.4, 0.45, 0.5, 0.3)
+
+[node name="VFXContainer" type="Node2D" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Panel" type="Panel" parent="UI"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 320.0
+offset_bottom = 704.0
+
+[node name="VBox" type="VBoxContainer" parent="UI/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "✦ VFX 特效资产预览器"
+horizontal_alignment = 1
+
+[node name="InfoLabel" type="Label" parent="UI/Panel/VBox"]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
+theme_override_font_sizes/font_size = 12
+text = "当前特效: 完美弹反\n路径: vfx_perfect_parry.tscn"
+autowrap_mode = 2
+
+[node name="HSeparator1" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="LoopCheck" type="CheckBox" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "循环播放当前特效 (1.0s)"
+
+[node name="BGToggle" type="CheckBox" parent="UI/Panel/VBox"]
+layout_mode = 2
+text = "切换至老街实战背景"
+
+[node name="ScaleRow" type="HBoxContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ScaleLabel" type="Label" parent="UI/Panel/VBox/ScaleRow"]
+layout_mode = 2
+text = "缩放: "
+
+[node name="ScaleSlider" type="HSlider" parent="UI/Panel/VBox/ScaleRow"]
+layout_mode = 3
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.5
+max_value = 2.5
+step = 0.1
+value = 1.0
+
+[node name="ScaleVal" type="Label" parent="UI/Panel/VBox/ScaleRow"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+text = "1.0x"
+horizontal_alignment = 2
+
+[node name="ColorLabel" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "意图调色 (Modulate):"
+
+[node name="ColorGrid" type="GridContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+columns = 3
+
+[node name="BtnWhite" type="Button" parent="UI/Panel/VBox/ColorGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "原色"
+
+[node name="BtnRed" type="Button" parent="UI/Panel/VBox/ColorGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.9, 0.3, 0.3, 1)
+text = "赤·嗔"
+
+[node name="BtnBlue" type="Button" parent="UI/Panel/VBox/ColorGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.3, 0.7, 0.8, 1)
+text = "碧·痴"
+
+[node name="BtnGreen" type="Button" parent="UI/Panel/VBox/ColorGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.4, 0.8, 0.4, 1)
+text = "青·疑"
+
+[node name="BtnGold" type="Button" parent="UI/Panel/VBox/ColorGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.95, 0.8, 0.4, 1)
+text = "金·煞"
+
+[node name="HSeparator2" type="HSeparator" parent="UI/Panel/VBox"]
+layout_mode = 2
+
+[node name="ListTitle" type="Label" parent="UI/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "特效列表 (点击播放):"
+
+[node name="ButtonScroll" type="ScrollContainer" parent="UI/Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ButtonList" type="VBoxContainer" parent="UI/Panel/VBox/ButtonScroll"]
+layout_mode = 3
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[connection signal="toggled" from="UI/Panel/VBox/BGToggle" to="." method="_on_bg_toggle_toggled"]
+[connection signal="value_changed" from="UI/Panel/VBox/ScaleRow/ScaleSlider" to="." method="_on_scale_slider_value_changed"]
+[connection signal="pressed" from="UI/Panel/VBox/ColorGrid/BtnWhite" to="." method="_on_color_selected" binds= [0]]
+[connection signal="pressed" from="UI/Panel/VBox/ColorGrid/BtnRed" to="." method="_on_color_selected" binds= [1]]
+[connection signal="pressed" from="UI/Panel/VBox/ColorGrid/BtnBlue" to="." method="_on_color_selected" binds= [2]]
+[connection signal="pressed" from="UI/Panel/VBox/ColorGrid/BtnGreen" to="." method="_on_color_selected" binds= [3]]
+[connection signal="pressed" from="UI/Panel/VBox/ColorGrid/BtnGold" to="." method="_on_color_selected" binds= [4]]
