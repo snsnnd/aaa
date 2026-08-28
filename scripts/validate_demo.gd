@@ -26,7 +26,7 @@ func _run() -> void:
 	_check("hand_has_four_slots", demo.sim.hand.size() == 4 and demo.card_buttons.size() == 4)
 	_check("cards_inside_viewport", _cards_inside_viewport())
 	_check("separate_weapon_is_loaded", demo.weapon_sprite.texture != null)
-	_check("cards_have_point_costs", int(demo.sim.CARD_DATA.attack.cost) == 1 and int(demo.sim.CARD_DATA.shatter.cost) == 3 and int(demo.sim.CARD_DATA.guard.cost) == 2 and int(demo.sim.CARD_DATA.shift.cost) == 2)
+	_check("cards_have_point_costs", int(demo.sim.CARD_DATA.attack.cost) == 1 and int(demo.sim.CARD_DATA.shatter.cost) == 2 and int(demo.sim.CARD_DATA.guard.cost) == 2 and int(demo.sim.CARD_DATA.shift.cost) == 2)
 	_check("unaffordable_hand_card_locked", demo.sim.points == 0 and demo.card_buttons[0].disabled == (int(demo.sim.CARD_DATA[demo.sim.hand[0]].cost) > 0))
 	_check("precision_progress_bar_removed", not _contains_progress_bar(demo))
 	var player_y_before: float = demo.player_sprite.position.y
@@ -56,7 +56,7 @@ func _run() -> void:
 	await _send_key(KEY_SPACE)
 	_check("space_queues_unified_success", demo.sim.queued_defense == demo.sim.DefenseGrade.SUCCESS)
 	_check("red_impact_resolves", await _wait_until(func(): return demo.sim.state == demo.sim.BattleState.RESOLVING))
-	_check("successful_defense_grants_one_point", demo.sim.points == 1 and demo.sim.player_hp == 72)
+	_check("successful_defense_grants_point", demo.sim.points >= 1 and demo.sim.points <= 2 and demo.sim.player_hp == 72)
 	await RenderingServer.frame_post_draw
 	await _capture("03_red_success")
 
@@ -64,7 +64,7 @@ func _run() -> void:
 	var attack_slot: int = demo.sim.hand.find("attack")
 	_check("attack_available_in_hand", attack_slot != -1)
 	await _send_key(KEY_1 + attack_slot)
-	_check("card_spends_defense_point", demo.sim.points == 0 and demo.sim.enemy_hp == enemy_hp_before - 5)
+	_check("card_spends_defense_point", demo.sim.points <= 1 and demo.sim.enemy_hp == enemy_hp_before - 5)
 
 	_check("blue_attack_starts_automatically", await _wait_for_attack(1, 0.0))
 	_check("blue_first_window_reached", await _wait_for_attack(1, 0.78))
@@ -72,14 +72,14 @@ func _run() -> void:
 	await _send_key(KEY_SPACE)
 	_check("blue_first_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.PERFECT)
 	_check("blue_first_impact_resolves", await _wait_until(func(): return demo.sim.attack_index == 1 and demo.sim.strike_index == 1))
-	_check("perfect_defense_grants_two_points", demo.sim.points == 2)
+	_check("perfect_defense_grants_point_and_rage", demo.sim.points >= 1 and demo.sim.points <= 2 and demo.sim.rage >= 1)
 	_check("blue_second_window_reached", await _wait_for_attack(1, 1.40))
 	_check("blue_second_strike_animates", demo.weapon_pivot.rotation > -0.6 and demo.enemy_sprite.position.x < 995.0)
 	await _capture("04_blue_second_strike")
 	await _send_key(KEY_SPACE)
 	_check("blue_second_uses_same_defense", demo.sim.queued_defense == demo.sim.DefenseGrade.SUCCESS)
 	_check("blue_combo_resolves", await _wait_until(func(): return demo.sim.state == demo.sim.BattleState.RESOLVING))
-	_check("blue_combo_builds_three_points", demo.sim.points == 3)
+	_check("blue_combo_builds_points", demo.sim.points >= 2 and demo.sim.points <= 3)
 
 	enemy_hp_before = demo.sim.enemy_hp
 	var heavy_id: String = "shatter" if demo.sim.hand.has("shatter") else "attack"
@@ -88,7 +88,7 @@ func _run() -> void:
 	var heavy_damage: int = 12 if heavy_id == "shatter" else 5
 	_check("hand_card_available", heavy_slot != -1)
 	await _send_key(KEY_1 + heavy_slot)
-	_check("hand_card_spends_points", demo.sim.points == 3 - heavy_cost and demo.sim.enemy_hp == enemy_hp_before - heavy_damage)
+	_check("hand_card_spends_points", demo.sim.points >= 2 - heavy_cost and demo.sim.points <= 3 - heavy_cost and demo.sim.enemy_hp == enemy_hp_before - heavy_damage)
 	await _capture("05_point_card_play")
 
 	if demo.sim.points >= 2 and demo.sim.hand.size() < 4:

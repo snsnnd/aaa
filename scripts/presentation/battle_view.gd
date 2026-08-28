@@ -5,6 +5,7 @@ extends Node2D
 
 const ASSET_FOLDER := "demo"
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
+const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 const FxStateScript := preload("res://scripts/presentation/fx_state.gd")
 const BattleStageScript := preload("res://scripts/presentation/battle_stage.gd")
 const PlayerAnimScript := preload("res://scripts/presentation/player_anim.gd")
@@ -76,10 +77,10 @@ func setup(s: BattleSimulationScript) -> void:
 	player_anim.load_style(ASSET_FOLDER)
 	enemy_anim.load_style(ASSET_FOLDER)
 
-	parry_audio = _audio_player("res://assets/demo/audio/parry.wav")
-	hurt_audio = _audio_player("res://assets/demo/audio/hurt.wav")
-	card_audio = _audio_player("res://assets/demo/audio/card.wav")
-	warning_audio = _audio_player("res://assets/demo/audio/warning.wav")
+	parry_audio = _audio_player(PresentationCatalog.AUDIO.parry)
+	hurt_audio = _audio_player(PresentationCatalog.AUDIO.hurt)
+	card_audio = _audio_player(PresentationCatalog.AUDIO.card)
+	warning_audio = _audio_player(PresentationCatalog.AUDIO.warning)
 
 
 func _audio_player(path: String) -> AudioStreamPlayer:
@@ -94,7 +95,7 @@ func view_time() -> float:
 
 
 func intent_color() -> Color:
-	return sim.current_intent.color
+	return PresentationCatalog.MOVE_PRESENTATION[String(sim.current_intent.id)].color
 
 
 func add_trauma(amount: float) -> void:
@@ -208,7 +209,7 @@ func seal_ring() -> void:
 
 
 func summon_vfx(id: String) -> void:
-	player_anim.summon_vfx(BattleSimulationScript.CARD_DATA[id].color)
+	player_anim.summon_vfx(PresentationCatalog.CARD_PRESENTATION[id].color)
 
 
 func embers() -> void:
@@ -216,7 +217,7 @@ func embers() -> void:
 
 
 func spawn_talisman(id: String) -> void:
-	player_anim.spawn_talisman(id, BattleSimulationScript.CARD_DATA[id])
+	player_anim.spawn_talisman(id, PresentationCatalog.CARD_PRESENTATION[id])
 
 
 func success_impact_fx() -> void:

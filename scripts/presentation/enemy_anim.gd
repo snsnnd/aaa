@@ -4,6 +4,7 @@ extends Node2D
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const FxState := preload("res://scripts/presentation/fx_state.gd")
+const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 
 var enemy_sprite: Sprite2D
 var weapon_pivot: Node2D
@@ -95,8 +96,7 @@ func load_style(folder: String) -> void:
 
 
 func load_enemy_texture(id: String) -> void:
-	var path := "res://assets/demo/enemy_watchman.png" if id == "watchman" else "res://assets/game/enemies/%s.png" % id
-	enemy_sprite.texture = load(path)
+	enemy_sprite.texture = load(PresentationCatalog.ENEMY_PRESENTATION[id].texture)
 	enemy_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
@@ -105,7 +105,7 @@ func sim() -> BattleSimulationScript:
 
 
 func apply_presentation() -> void:
-	var color: Color = sim().current_intent.color
+	var color: Color = PresentationCatalog.MOVE_PRESENTATION[String(sim().current_intent.id)].color
 	attack_trail.visible = false
 	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-205, 0)])
 	attack_trail.modulate = Color.WHITE
@@ -261,7 +261,7 @@ func _strike_combo(ratio: float) -> void:
 	attack_trail.position = enemy_sprite.position + Vector2(18, -26)
 	attack_trail.rotation = weapon_pivot.rotation + PI * 0.5
 	attack_trail.width = 12.0
-	attack_trail.default_color = s.current_intent.color.lightened(0.35)
+	attack_trail.default_color = PresentationCatalog.MOVE_PRESENTATION[String(s.current_intent.id)].color.lightened(0.35)
 	attack_trail.modulate.a = 0.68
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 

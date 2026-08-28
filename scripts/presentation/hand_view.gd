@@ -3,6 +3,7 @@ extends Control
 ## 手牌区：四个符牌槽、召符/防范按钮、牌堆视图与操作提示。
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
+const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 
 var sim: BattleSimulationScript
 var command: Callable
@@ -30,13 +31,7 @@ func setup(s: BattleSimulationScript, command_cb: Callable) -> void:
 
 func _load_card_textures() -> void:
 	for id in BattleSimulationScript.CARD_DATA:
-		var demo_path := "res://assets/demo/card_%s.png" % id
-		var tex: Texture2D = null
-		if ResourceLoader.exists(demo_path):
-			tex = load(demo_path)
-		if tex == null:
-			tex = load("res://assets/game/cards/card_%s.png" % id)
-		_card_textures[id] = tex
+		_card_textures[id] = load(PresentationCatalog.CARD_PRESENTATION[id].icon)
 
 
 func _build() -> void:
@@ -143,13 +138,14 @@ func rebuild_hand() -> void:
 		if i < sim.hand.size():
 			var id: String = sim.hand[i]
 			var data: Dictionary = BattleSimulationScript.CARD_DATA[id]
+			var pres: Dictionary = PresentationCatalog.CARD_PRESENTATION[id]
 			icon.texture = _card_textures.get(id)
-			title.text = "%s  [%d]" % [data.title, i + 1]
+			title.text = "%s  [%d]" % [pres.title, i + 1]
 			hint.text = "%s·%d点｜%s" % [data["class"], data.cost, _card_short(id)]
 			class_tag.text = String(data["class"])
 			class_tag.add_theme_color_override("font_color", class_colors[data["class"]])
 			button.tooltip_text = _card_tip(id)
-			var col: Color = data.color
+			var col: Color = pres.color
 			button.add_theme_stylebox_override("normal", _style_box(Color("151821"), col.darkened(0.2), 12, 3))
 			button.add_theme_stylebox_override("hover", _style_box(Color("222631"), col, 12, 4))
 		else:
@@ -215,7 +211,7 @@ func refresh_defense() -> void:
 
 
 func _card_short(id: String) -> String:
-	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯", "duannian": "断念", "dengxin": "挑芯", "zhuangzhong": "鸣钟"}
+	var shorts := {"attack": "散怨", "shatter": "重斩", "guard": "凝滞", "shift": "续灯", "duannian": "断念", "dengxin": "挑芯", "zhuangzhong": "鸣钟", "anhun": "安魂"}
 	return shorts.get(id, "符牌")
 
 
@@ -228,6 +224,7 @@ func _card_tip(id: String) -> String:
 		"duannian": "斩去 8 点怨气，弃一张手牌",
 		"dengxin": "回复 4 点灯油",
 		"zhuangzhong": "斩去 5 点怨气，凝滞 0.2 秒",
+		"anhun": "净化：下一记鬼手改为可防范",
 	}
 	return tips.get(id, "符牌")
 

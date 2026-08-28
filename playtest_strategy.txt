@@ -1,0 +1,9 @@
+perfect_target=true
+perfect_at=0.06
+grace=0.05
+heal_below=18
+reserve=1
+reserve_calm=0
+shatter_at=2
+shatter_only_charged=true
+attack_at=1

@@ -295,6 +295,30 @@ func enemy_cue_fx(origin: Vector2, enemy_id: String, move_id: String, color: Col
 			fx.glow_boost = -0.4
 
 
+func rage_flare(origin: Vector2) -> void:
+	var flare := Sprite2D.new()
+	flare.texture = _make_rage_texture()
+	flare.position = origin + Vector2(-12, -30)
+	flare.scale = Vector2(2.8, 3.4)
+	flare.z_index = 2
+	flare.modulate.a = 0.0
+	add_child(flare)
+	var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+	tw.tween_property(flare, "modulate:a", 0.55, 0.35)
+	tw.chain().tween_property(flare, "modulate:a", 0.0, 0.7)
+	tw.chain().tween_callback(flare.queue_free)
+
+
+func _make_rage_texture() -> ImageTexture:
+	var image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	for y in 128:
+		for x in 128:
+			var distance := Vector2(x - 63.5, y - 63.5).length() / 63.5
+			var alpha := pow(maxf(0.0, 1.0 - distance), 2.2) * 0.5
+			image.set_pixel(x, y, Color(0.85, 0.2, 0.16, alpha))
+	return ImageTexture.create_from_image(image)
+
+
 func soul_motes(origin: Vector2, color: Color, rising: bool) -> void:
 	for i in 14:
 		var mote := Polygon2D.new()

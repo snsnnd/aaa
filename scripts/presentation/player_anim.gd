@@ -124,8 +124,8 @@ func _update_talisman_trails() -> void:
 			trail.remove_point(0)
 
 
-func spawn_talisman(id: String, card_data: Dictionary) -> void:
-	var color: Color = card_data.color
+func spawn_talisman(id: String, card_pres: Dictionary) -> void:
+	var color: Color = card_pres.color
 	var tal := Node2D.new()
 	tal.position = player_pivot.position + Vector2(74, 4)
 	tal.z_index = 15
