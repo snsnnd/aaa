@@ -46,21 +46,17 @@ func setup(state: FxState) -> void:
 	ghost_hand.z_index = 13
 	add_child(ghost_hand)
 
+	# 移除过大的竖向强光叠加光柱 (enemy_aura)
 	enemy_aura = Sprite2D.new()
-	enemy_aura.texture = _make_glow_texture(Color(0.15, 0.62, 0.66, 0.25))
-	enemy_aura.position = enemy_sprite.position + Vector2(-12, -30)
-	enemy_aura.scale = Vector2(2.8, 3.4)
-	var aura_material := CanvasItemMaterial.new()
-	aura_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	enemy_aura.material = aura_material
-	enemy_aura.z_index = 0
+	enemy_aura.visible = false
 	add_child(enemy_aura)
 
+	# 精准刀尖动态轨迹拖尾 (轻薄刀痕，非光柱)
 	attack_trail = Line2D.new()
-	attack_trail.position = Vector2(1008, 310)
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-205, 0)])
-	attack_trail.width = 18.0
-	attack_trail.default_color = Color("bd3d45")
+	attack_trail.position = Vector2.ZERO
+	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-90, 20)])
+	attack_trail.width = 4.5
+	attack_trail.default_color = Color("fff1bd")
 	attack_trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	attack_trail.end_cap_mode = Line2D.LINE_CAP_ROUND
 	attack_trail.visible = false
@@ -206,7 +202,6 @@ func staggered_fx() -> void:
 func death_dissolve() -> void:
 	enemy_sprite.modulate = Color("cfeef0")
 	create_tween().tween_property(enemy_sprite, "modulate:a", 0.0, 1.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	create_tween().tween_property(enemy_aura, "modulate:a", 0.0, 1.1)
 
 
 func tick(delta: float) -> void:
@@ -228,8 +223,6 @@ func tick(delta: float) -> void:
 		if s.state != BattleSimulationScript.BattleState.RESOLVING:
 			enemy_sprite.position.y = 350.0 + sin(get_parent().view_time() * 1.22 + 1.7) * 5.0
 			weapon_pivot.rotation += sin(get_parent().view_time() * 0.88 + 0.7) * -0.006
-	enemy_aura.position = enemy_sprite.position + Vector2(-12, -30)
-	enemy_aura.modulate.a = 0.50 + sin(get_parent().view_time() * 1.8) * 0.12
 
 
 func _sync_phase(s) -> void:
