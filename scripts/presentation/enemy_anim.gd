@@ -12,7 +12,6 @@ var enemy_sprite: Sprite2D
 var weapon_pivot: Node2D
 var weapon_sprite: Sprite2D
 var ghost_hand: Node2D
-var attack_trail: Line2D
 var enemy_aura: Sprite2D
 var fx: FxState
 var state_machine: CharacterStateMachine
@@ -46,22 +45,9 @@ func setup(state: FxState) -> void:
 	ghost_hand.z_index = 13
 	add_child(ghost_hand)
 
-	# 移除过大的竖向强光叠加光柱 (enemy_aura)
 	enemy_aura = Sprite2D.new()
 	enemy_aura.visible = false
 	add_child(enemy_aura)
-
-	# 精准刀尖动态轨迹拖尾 (轻薄刀痕，非光柱)
-	attack_trail = Line2D.new()
-	attack_trail.position = Vector2.ZERO
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-90, 20)])
-	attack_trail.width = 4.5
-	attack_trail.default_color = Color("fff1bd")
-	attack_trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	attack_trail.end_cap_mode = Line2D.LINE_CAP_ROUND
-	attack_trail.visible = false
-	attack_trail.z_index = 11
-	add_child(attack_trail)
 
 
 func _make_glow_texture(color: Color) -> ImageTexture:
@@ -123,11 +109,6 @@ func sim() -> BattleSimulationScript:
 
 
 func apply_presentation() -> void:
-	var color: Color = PresentationCatalog.MOVE_PRESENTATION[String(sim().current_intent.id)].color
-	attack_trail.visible = false
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-205, 0)])
-	attack_trail.modulate = Color.WHITE
-	attack_trail.default_color = color
 	weapon_sprite.modulate = Color.WHITE
 	ghost_hand.visible = false
 	reset_pose()
@@ -148,7 +129,6 @@ func reset_pose() -> void:
 
 
 func finish_action_fx() -> void:
-	attack_trail.visible = false
 	ghost_hand.visible = false
 
 
@@ -287,13 +267,6 @@ func _red_slow_blade(ratio: float) -> void:
 		enemy_sprite.position.x = lerpf(1020.0, 580.0, snap)
 		enemy_sprite.rotation = lerpf(0.04, -0.16, snap)
 
-	attack_trail.visible = (ratio > 0.80 and ratio < 0.98)
-	attack_trail.points = PackedVector2Array([Vector2.ZERO, Vector2(-180, 50)])
-	attack_trail.position = enemy_sprite.position + Vector2(-40, -10)
-	attack_trail.rotation = -0.25
-	attack_trail.width = 14.0
-	attack_trail.default_color = Color("fff1bd")
-	attack_trail.modulate.a = clampf((ratio - 0.80) / 0.10, 0.0, 0.85)
 	weapon_pivot.position = enemy_sprite.position + Vector2(38, -28)
 
 

@@ -31,9 +31,6 @@ var weapon_pivot: Node2D:
 var weapon_sprite: Sprite2D:
 	get:
 		return view.weapon_sprite
-var attack_trail: Line2D:
-	get:
-		return view.attack_trail
 var ghost_hand: Node2D:
 	get:
 		return view.ghost_hand

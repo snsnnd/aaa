@@ -50,7 +50,7 @@ func _run() -> void:
 	await process_frame
 	await RenderingServer.frame_post_draw
 	_check("red_commit_is_body_readable", demo.enemy_sprite.position.x < 980.0 and demo.weapon_pivot.rotation > -1.1)
-	_check("red_commit_has_blade_trail", demo.attack_trail.visible)
+	_check("red_commit_pose_reached", demo.weapon_pivot.rotation > -1.1 and demo.enemy_sprite.position.x < 980.0)
 	await _capture("02_red_commit_pose")
 
 	await _send_key(KEY_SPACE)
@@ -102,7 +102,7 @@ func _run() -> void:
 
 	_check("green_attack_starts_automatically", await _wait_for_attack(2, 0.0))
 	_check("green_reveal_reached", await _wait_for_attack(2, float(demo.sim.current_intent.duration) - 0.18))
-	_check("green_grab_replaces_fake_blade", demo.ghost_hand.visible and demo.ghost_hand.scale.x > 0.7 and not demo.attack_trail.visible)
+	_check("green_grab_replaces_fake_blade", demo.ghost_hand.visible and demo.ghost_hand.scale.x > 0.7)
 	var guard_slot: int = demo.sim.hand.find("guard")
 	if guard_slot != -1 and demo.sim.points >= 2:
 		await _send_key(KEY_1 + guard_slot)
