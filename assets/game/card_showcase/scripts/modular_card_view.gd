@@ -74,8 +74,14 @@ func setup_card_data(data: Dictionary, pres: Dictionary) -> void:
 	card_class = String(data.get("class", "斩"))
 	card_cost = int(data.get("cost", 1))
 	card_description = _format_description(data)
-	if pres.has("icon"):
+	
+	if pres.has("icon") and ResourceLoader.exists(pres["icon"]):
 		icon_texture = load(pres["icon"])
+	else:
+		var custom_icon := "res://assets/game/cards/card_%s.png" % card_id
+		if ResourceLoader.exists(custom_icon):
+			icon_texture = load(custom_icon)
+			
 	_update_card_display()
 
 

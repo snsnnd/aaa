@@ -31,6 +31,7 @@ const ALL_CARDS := [
 	{"id": "jiedao", "title": "借刀", "class": "御", "cost": 2, "interrupt": true},
 	{"id": "jinshen", "title": "金身", "class": "御", "cost": 2, "golden": 1},
 	{"id": "podan", "title": "破胆", "class": "御", "cost": 2, "fear_mul": 0.6},
+	{"id": "duanxiang", "title": "断香", "class": "御", "cost": 1, "suppress_fake": true},
 	# 佑类
 	{"id": "shift", "title": "续灯", "class": "佑", "cost": 2, "heal": 7},
 	{"id": "dengxin", "title": "灯芯", "class": "佑", "cost": 1, "heal": 4},
@@ -40,6 +41,7 @@ const ALL_CARDS := [
 	{"id": "changming", "title": "长明", "class": "佑", "cost": 2, "max_hp": 6},
 	{"id": "jieshou", "title": "借寿", "class": "佑", "cost": 1, "heal": 10},
 	{"id": "anhun", "title": "安魂", "class": "佑", "cost": 1, "cleanse": true},
+	{"id": "tinggeng", "title": "听更", "class": "佑", "cost": 1, "reveal_next": true},
 ]
 
 @onready var hand_container: HandFanContainer = $Stage/HandArea/HandFanContainer
