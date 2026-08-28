@@ -1,0 +1,34 @@
+[gd_scene load_steps=6 format=3 uid="uid://c8_env_old_street_01"]
+
+[ext_resource type="Texture2D" path="res://assets/game/environments/old_street/bg_layer0_sky_moon.png" id="1_sky"]
+[ext_resource type="Texture2D" path="res://assets/game/environments/old_street/bg_layer1_distant_eaves.png" id="2_eaves"]
+[ext_resource type="Texture2D" path="res://assets/game/environments/old_street/bg_layer2_mid_buildings.png" id="3_mid"]
+[ext_resource type="Texture2D" path="res://assets/game/environments/old_street/bg_layer3_ground_puddles.png" id="4_ground"]
+[ext_resource type="Texture2D" path="res://assets/game/environments/old_street/bg_layer4_foreground_fog.png" id="5_fog"]
+
+[node name="EnvOldStreetParallax" type="Node2D"]
+
+[node name="Layer0_Sky" type="Sprite2D" parent="."]
+z_index = -30
+position = Vector2(960, 540)
+texture = ExtResource("1_sky")
+
+[node name="Layer1_DistantEaves" type="Sprite2D" parent="."]
+z_index = -25
+position = Vector2(960, 540)
+texture = ExtResource("2_eaves")
+
+[node name="Layer2_MidBuildings" type="Sprite2D" parent="."]
+z_index = -20
+position = Vector2(960, 540)
+texture = ExtResource("3_mid")
+
+[node name="Layer3_GroundPuddles" type="Sprite2D" parent="."]
+z_index = -15
+position = Vector2(960, 540)
+texture = ExtResource("4_ground")
+
+[node name="Layer4_ForegroundFog" type="Sprite2D" parent="."]
+z_index = 10
+position = Vector2(960, 540)
+texture = ExtResource("5_fog")
