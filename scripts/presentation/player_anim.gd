@@ -10,6 +10,7 @@ const PresentationCatalog := preload("res://scripts/presentation/presentation_ca
 
 var player_pivot: Node2D
 var player_sprite: Sprite2D
+var lantern_pivot: Node2D
 var lantern_sprite: Sprite2D
 var lantern_glow: Sprite2D
 var fx: FxState
@@ -35,15 +36,19 @@ func setup(state: FxState) -> void:
 	player_sprite.scale = Vector2(0.49, 0.49)
 	player_pivot.add_child(player_sprite)
 
+	lantern_pivot = Node2D.new()
+	lantern_pivot.position = Vector2(64, 40) # Hand grip anchor
+	player_pivot.add_child(lantern_pivot)
+
 	lantern_sprite = Sprite2D.new()
-	lantern_sprite.position = Vector2(58, 58)
+	lantern_sprite.position = Vector2(0, 84) # Offset from hook to lantern center
 	lantern_sprite.scale = Vector2(0.49, 0.49)
 	lantern_sprite.visible = false
-	player_pivot.add_child(lantern_sprite)
+	lantern_pivot.add_child(lantern_sprite)
 
 	lantern_glow = Sprite2D.new()
 	lantern_glow.texture = _make_glow_texture(Color(1.0, 0.42, 0.08, 0.48))
-	lantern_glow.position = player_pivot.position + Vector2(118, 112)
+	lantern_glow.position = player_pivot.position + Vector2(64, 114)
 	lantern_glow.scale = Vector2(2.35, 2.35)
 	var lantern_material := CanvasItemMaterial.new()
 	lantern_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -115,9 +120,9 @@ func tick(delta: float) -> void:
 	_update_combat_pose(delta)
 	fx.glow_boost = lerpf(fx.glow_boost, 0.0, minf(1.0, delta * 3.0))
 	var flicker := sin(animation_time * 9.7) * 0.08 + sin(animation_time * 15.1) * 0.04
-	lantern_glow.position = player_pivot.position + Vector2(118, 112)
-	if lantern_sprite and lantern_sprite.visible and anim_profile and anim_profile.prop_sway_angle > 0.0:
-		lantern_sprite.rotation = sin(animation_time * anim_profile.prop_sway_freq - anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
+	if lantern_pivot and lantern_sprite.visible and anim_profile and anim_profile.prop_sway_angle > 0.0:
+		lantern_pivot.rotation = sin(animation_time * anim_profile.prop_sway_freq - anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
+	lantern_glow.position = player_pivot.position + Vector2(64, 114) + (Vector2(sin(lantern_pivot.rotation) * 45.0, 0.0) if lantern_pivot else Vector2.ZERO)
 	lantern_glow.scale = Vector2.ONE * (2.35 * (1.0 + 0.38 * fx.glow_boost))
 	lantern_glow.modulate.a = clampf((0.76 + flicker) * (1.0 + 0.5 * fx.glow_boost), 0.18, 1.0)
 	_update_talisman_trails()

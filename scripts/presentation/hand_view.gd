@@ -94,7 +94,7 @@ func _build() -> void:
 func _create_slot_button(pos: Vector2, slot: int) -> void:
 	var button := Button.new()
 	button.position = pos
-	button.size = Vector2(142, 156)
+	button.size = Vector2(142, 160)
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_stylebox_override("normal", _style_box(Color("151821"), Color("4a4438"), 12, 3))
 	button.add_theme_stylebox_override("hover", _style_box(Color("222631"), Color("6a6250"), 12, 4))
@@ -103,7 +103,7 @@ func _create_slot_button(pos: Vector2, slot: int) -> void:
 	add_child(button)
 
 	var icon := TextureRect.new()
-	icon.position = Vector2(31, 8)
+	icon.position = Vector2(31, 14)
 	icon.size = Vector2(80, 80)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -112,25 +112,25 @@ func _create_slot_button(pos: Vector2, slot: int) -> void:
 	button.add_child(icon)
 
 	var frame := TextureRect.new()
-	frame.position = Vector2(2, 2)
-	frame.size = Vector2(138, 152)
+	frame.position = Vector2.ZERO
+	frame.size = Vector2(142, 160)
 	frame.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	frame.stretch_mode = TextureRect.STRETCH_SCALE
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.z_index = 1
 	button.add_child(frame)
 
-	var title := _label(Vector2(8, 87), Vector2(126, 28), 20, Color("eee2c1"), true)
+	var title := _label(Vector2(8, 98), Vector2(126, 26), 18, Color("eee2c1"), true)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.z_index = 2
 	button.add_child(title)
-	var hint := _label(Vector2(8, 117), Vector2(126, 30), 13, Color("a9a49b"), false)
+	var hint := _label(Vector2(8, 126), Vector2(126, 28), 12, Color("a9a49b"), false)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint.z_index = 2
 	button.add_child(hint)
-	var class_tag := _label(Vector2(10, 6), Vector2(34, 24), 15, Color.WHITE, true)
+	var class_tag := _label(Vector2(104, 6), Vector2(30, 24), 14, Color.WHITE, true)
 	class_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	class_tag.z_index = 2
 	button.add_child(class_tag)
@@ -205,14 +205,25 @@ func _fill_pile_box(box: Control, pile: Array[String]) -> void:
 
 func refresh_slots() -> void:
 	var ended := sim.state == BattleSimulationScript.BattleState.VICTORY or sim.state == BattleSimulationScript.BattleState.DEFEAT
+	var stagger_active := sim.stagger_remaining > 0.0 or sim.was_last_perfect
 	for i in 4:
 		var button: Button = card_buttons[i]
 		if i < sim.hand.size():
-			var cost := int(BattleSimulationScript.CARD_DATA[sim.hand[i]].cost)
-			button.disabled = sim.points < cost or ended
+			var card_id: String = sim.hand[i]
+			var cost := int(BattleSimulationScript.CARD_DATA[card_id].cost)
+			var can_afford := sim.points >= cost and not ended
+			button.disabled = not can_afford
+			if not can_afford:
+				button.modulate = Color(0.55, 0.58, 0.65, 0.65)
+			elif card_id == "shatter" and stagger_active:
+				button.modulate = Color("ffe08a") # Stagger bonus glow highlight
+			else:
+				button.modulate = Color.WHITE
 		else:
 			button.disabled = true
+			button.modulate = Color.WHITE
 	summon_button.disabled = sim.points < BattleSimulationScript.SUMMON_COST or sim.hand.size() >= BattleSimulationScript.HAND_SIZE or ended
+	summon_button.modulate = Color.WHITE if not summon_button.disabled else Color(0.55, 0.58, 0.65, 0.65)
 	refresh_defense()
 
 
