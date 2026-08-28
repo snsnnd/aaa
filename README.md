@@ -34,5 +34,5 @@
 - **剧情耦合**：事件旗标进入战斗规则（破纸胎甲、骰运做局、窗口放宽、Boss 慢半拍）
 - **基础设施**：TimeController 统一时间流速；InputMap 动作 + 键位重映射 + 手柄；无障碍（震屏/闪光/文字/色觉/反应窗口辅助）；渐进式教学；RunState 可序列化 + 自动存档
 - **数据闭环**：Telemetry 收集逐招误判率、首死位置、卡牌选择率、召符资源占比、构筑胜率、退出节点（user://telemetry/summary.json）
-- `Space` 是牌组外的统一防范：成功获得 1 还愿点，完美获得 2 点，失误触发短冷却
+- `Space` 是牌组外的统一防范：成功获得 1 还愿点，完美获得 1 点并进入乘势（僵直中还刃追加、召符半价），失误触发短冷却
 - `tools/validate_demo.sh`：冒烟+画面验证；`tools/validate_roguelike.gd`：肉鸽系统 24 项验证；`tools/validate_three_builds.gd`：三构筑分化验证
