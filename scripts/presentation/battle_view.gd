@@ -46,6 +46,9 @@ var ghost_hand: Node2D:
 var attack_trail: Line2D:
 	get:
 		return enemy_anim.attack_trail
+var lantern_sprite: Sprite2D:
+		get:
+			return player_anim.lantern_sprite
 var player_sprite: Sprite2D:
 	get:
 		return player_anim.player_sprite
