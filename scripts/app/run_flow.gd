@@ -306,12 +306,7 @@ func _free_battle() -> void:
 func _on_reward_picked(index: int) -> void:
 	if state != State.REWARD or index >= draft_options.size():
 		return
-	var best := index
-	for i in draft_options.size():
-		if String(draft_options[i]) == "guard":
-			best = i
-			break
-	run_deck.append(draft_options[best])
+	run_deck.append(draft_options[index])
 	_advance_node()
 
 
@@ -510,10 +505,7 @@ func _build_flow_ui() -> void:
 	rest_body.text = "长明灯旁添一次油\n灯油 +20"
 	rpanel.add_child(rest_body)
 	var rgo := _button(Vector2(60, 190), Vector2(280, 48), "继续夜巡")
-	rgo.pressed.connect(func():
-		run_hp = mini(72, run_hp + 20)
-		_advance_node()
-	)
+	rgo.pressed.connect(func(): _advance_node())
 	rpanel.add_child(rgo)
 
 	event_layer.add_child(_dim(Color(0.03, 0.02, 0.03, 0.88)))

@@ -102,9 +102,9 @@ func _ai_boot() -> void:
 	for id in String(cfg.get("deck", "attack,attack,shatter,guard,shift")).split(","):
 		deck.append(id.strip_edges())
 	sim.deck_config = deck
+	sim.restart()
 	if cfg.has("hp"):
 		sim.player_hp = int(cfg["hp"])
-	sim.restart()
 	view.apply_attack_presentation()
 	hud.rebuild_hand()
 	hud.rebuild_pile_view()

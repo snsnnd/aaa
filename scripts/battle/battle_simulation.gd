@@ -336,13 +336,9 @@ func _move_weight(mid: String) -> float:
 		w = 0.0
 	if String(mid) == second_last_move_id and int(ENEMIES[enemy_id].moves.size()) == 2:
 		w *= 0.15
-	if String(mid) == second_last_move_id and int(ENEMIES[enemy_id].moves.size()) == 2:
-		w *= 0.15
 	if bool(move.get("unblockable", false)):
 		if points >= 7 or rage >= 2:
 			w += 0.9
-		if enemy_hp >= int(ENEMIES[enemy_id].hp) * 0.6 and enemy_id != "lantern_keeper":
-			w *= 0.5
 		if enemy_hp >= int(ENEMIES[enemy_id].hp) * 0.6 and enemy_id != "lantern_keeper":
 			w *= 0.5
 	if int(move.damage) >= 12 and player_hp <= 24:
