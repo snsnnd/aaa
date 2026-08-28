@@ -1,6 +1,8 @@
 class_name BattleSimulation
 extends RefCounted
 
+const ContentCatalog := preload("res://scripts/battle/content_catalog.gd")
+
 ## 纯规则层：不含 Node、输入、音频、动画或任何 Godot 场景对象。
 ## 输入只能是 submit() 的命令，输出只能是事件数组，状态全部可读、可快照。
 
@@ -19,79 +21,11 @@ const STARTING_DECK := ["attack", "attack", "shatter", "guard", "shift"]
 const SUMMON_COST := 2
 const PLAYER_MAX_HP := 72
 
-const CARD_DATA := {
-	"attack": {"title": "斩纸", "class": "斩", "cost": 1, "damage": 5},
-	"shatter": {"title": "还刃", "class": "斩", "cost": 2, "damage": 12, "bonus": 6},
-	"guard": {"title": "镇煞", "class": "御", "cost": 2, "damage": 6, "stagger": 0.35},
-	"shift": {"title": "续灯", "class": "佑", "cost": 2, "heal": 7},
-	"duannian": {"title": "断念", "class": "斩", "cost": 2, "damage": 8, "discard_random": true},
-	"dengxin": {"title": "灯芯", "class": "佑", "cost": 1, "heal": 4},
-	"zhuangzhong": {"title": "撞钟", "class": "斩", "cost": 2, "damage": 5, "stagger": 0.2},
-	"anhun": {"title": "安魂", "class": "御", "cost": 1, "cleanse": true},
-	"duanxiang": {"title": "断香", "class": "御", "cost": 1},
-	"tinggeng": {"title": "听更", "class": "佑", "cost": 1},
-	"jieshi": {"title": "借势", "class": "御", "cost": 1},
-	"tongjing": {"title": "铜镜", "class": "御", "cost": 1},
-	"podan": {"title": "破胆", "class": "御", "cost": 2},
-	"jinshen": {"title": "金身", "class": "御", "cost": 2},
-}
+const CARD_DATA := ContentCatalog.CARD_DATA
 
-## 敌招阶段表：每招一段可学习的时间线。unblockable 招不可防范。
-const MOVES := {
-	"red": {
-		"id": "red", "title": "蓄势慢刀", "duration": 2.8, "damage": 16,
-		"window": 0.30, "fake": 1.25,
-		"phases": [
-			{"name": "raise", "until": 1.00},
-			{"name": "hold", "until": 1.90, "cue": true},
-			{"name": "commit", "until": 2.80, "cue": true},
-			{"name": "recover", "until": 3.42},
-		],
-	},
-	"blue": {
-		"id": "blue", "title": "变拍二连", "duration": 2.05, "damage": 7,
-		"window": 0.20, "strikes": [0.82, 1.56],
-		"phases": [
-			{"name": "raise", "until": 0.69},
-			{"name": "commit", "until": 0.82, "cue": true},
-			{"name": "reset", "until": 1.43},
-			{"name": "commit", "until": 1.56, "cue": true},
-			{"name": "recover", "until": 2.26},
-		],
-	},
-	"green": {
-		"id": "green", "title": "佯攻擒拿", "duration": 1.9, "damage": 10,
-		"window": 0.34, "fake": 0.78, "unblockable": true,
-		"phases": [
-			{"name": "feint", "until": 0.79},
-			{"name": "reveal", "until": 1.14, "cue": true},
-			{"name": "reach", "until": 1.90},
-			{"name": "recover", "until": 2.52},
-		],
-	},
-	"quick": {
-		"id": "quick", "title": "疾斩", "duration": 1.0, "damage": 9,
-		"window": 0.22, "strikes": [0.90],
-		"phases": [
-			{"name": "raise", "until": 0.55},
-			{"name": "commit", "until": 0.90, "cue": true},
-			{"name": "recover", "until": 1.32},
-		],
-	},
-}
+const MOVES := ContentCatalog.MOVES
 
-## 敌人表：名称、血量、招式轮换（永不 RNG 抖动）。
-const ENEMIES := {
-	"watchman": {"name": "前任更夫", "hp": 46, "moves": ["red", "blue", "green"], "opening": "red"},
-	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "dmg_mul": 0.8, "moves": ["quick", "red"], "opening": "quick", "reactive": true},
-	"patrol_corpse": {"name": "更练尸", "hp": 38, "dmg_mul": 0.9, "moves": ["blue", "red"], "opening": "blue", "reactive": true},
-	"barber_ghost": {"name": "剃头匠", "hp": 28, "dmg_mul": 1.0, "moves": ["blue", "quick"], "opening": "blue", "reactive": true},
-	"paper_apprentice": {"name": "纸扎学徒", "hp": 24, "dmg_mul": 0.9, "moves": ["red", "green"], "opening": "red", "reactive": true},
-	"well_sisters": {"name": "井中姐弟", "hp": 30, "dmg_mul": 1.0, "moves": ["blue", "green"], "opening": "blue", "reactive": true},
-	"gambler_ghost": {"name": "赌鬼", "hp": 30, "dmg_mul": 0.9, "moves": ["quick", "blue", "red"], "opening": "quick", "reactive": true},
-	"mortuary_warden": {"name": "义庄看守", "hp": 32, "dmg_mul": 1.1, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
-	"lantern_keeper": {"name": "守灯人", "hp": 40, "dmg_mul": 1.15, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
-}
+const ENEMIES := ContentCatalog.ENEMIES
 
 var state: BattleState = BattleState.WINDUP
 var player_hp := PLAYER_MAX_HP
@@ -130,6 +64,7 @@ var mirror_charges := 0
 var podan_mul := 1.0
 var golden_body := 0
 var stats := {}
+var defense_log: Array[Dictionary] = []
 var current_intent: Dictionary = {}
 
 
@@ -184,6 +119,7 @@ func restart() -> void:
 	podan_mul = 1.0
 	golden_body = 0
 	_reset_stats()
+	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
 	recovery_remaining = 0.0
 	battle_seed = 20260828 + battle_generation
@@ -350,9 +286,11 @@ func _attempt_defense() -> Array:
 			stats.points_spent = int(stats.get("points_spent", 0)) + 2
 			current_intent.unblockable = false
 			_finish_action(events)
+			_log_defense("基础镇煞")
 			events.append({"type": "basic_dispel"})
 		else:
 			defense_cooldown = MISS_COOLDOWN
+			_log_defense("未处理鬼手")
 			events.append({"type": "defense_miss", "unblockable": true, "reason": "points"})
 		return events
 	var time_to_impact := _current_impact_time() - attack_elapsed
@@ -362,6 +300,7 @@ func _attempt_defense() -> Array:
 		if force_perfect_next:
 			queued_defense = DefenseGrade.PERFECT
 			force_perfect_next = false
+		_log_defense("乘势借势" if was_last_perfect else ("完美" if queued_defense == DefenseGrade.PERFECT else "成功"), time_to_impact)
 	elif time_to_impact < 0.0 and time_to_impact >= -SUCCESS_GRACE:
 		queued_defense = DefenseGrade.SUCCESS
 	else:
@@ -415,6 +354,12 @@ func _move_weight(mid: String) -> float:
 	return w
 
 
+func _log_defense(result: String, tt := 0.0) -> void:
+	defense_log.append({"move": current_intent.get("title", "?"), "result": result, "tt": snappedf(tt, 0.01)})
+	if defense_log.size() > 3:
+		defense_log.pop_front()
+
+
 func _current_impact_time() -> float:
 	if current_intent.id == "blue":
 		var strikes: Array = current_intent.strikes
@@ -463,6 +408,7 @@ func _resolve_impact(events: Array) -> void:
 				golden_body -= 1
 			player_hp = maxi(0, player_hp - damage)
 			stats.unblocked_hits = int(stats.get("unblocked_hits", 0)) + 1
+			_log_defense("未防范 " + current_intent.get("title", ""))
 			events.append({"type": "impact", "grade": grade, "damage": damage, "enraged": enraged})
 			if player_hp <= 0:
 				_end_battle(events)
