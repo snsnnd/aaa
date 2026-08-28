@@ -1,7 +1,7 @@
 extends Control
 
 ## Character Animation Showcase Gallery
-## 角色动效状态机与阶段时间线展厅
+## 角色动效状态机与阶段时间线全景展厅 (10 位角色完整谱系)
 
 const CharacterAnimProfileScript := preload("res://assets/game/character_showcase/scripts/character_anim_profile.gd")
 const ModularCharacterViewScript := preload("res://assets/game/character_showcase/scripts/modular_character_view.gd")
@@ -11,8 +11,15 @@ const ROSTER := [
 	{
 		"name": "执灯人 (玩家/人型呼吸)",
 		"profile": "res://assets/game/character_showcase/profiles/profile_keeper.tres",
-		"texture": "res://assets/demo/player_keeper.png",
+		"texture": "res://assets/game/characters_sliced/keeper_body_clean.png",
 		"weapon": "",
+		"aura": ""
+	},
+	{
+		"name": "前任更夫 (教学/慢刀挥击)",
+		"profile": "res://assets/game/character_showcase/profiles/profile_watchman.tres",
+		"texture": "res://assets/demo/enemy_watchman.png",
+		"weapon": "res://assets/demo/enemy_blade.png",
 		"aura": ""
 	},
 	{
@@ -26,13 +33,27 @@ const ROSTER := [
 		"name": "更练尸 (机械巡更顿挫)",
 		"profile": "res://assets/game/character_showcase/profiles/profile_patrol_corpse.tres",
 		"texture": "res://assets/game/enemies/patrol_corpse.png",
-		"weapon": "res://assets/demo/enemy_blade.png",
+		"weapon": "",
 		"aura": ""
 	},
 	{
 		"name": "纸扎学徒 (折纸风吹微颤)",
 		"profile": "res://assets/game/character_showcase/profiles/profile_paper_apprentice.tres",
 		"texture": "res://assets/game/enemies/paper_apprentice.png",
+		"weapon": "",
+		"aura": ""
+	},
+	{
+		"name": "剃头匠 (贴地滑行/剃刀快连)",
+		"profile": "res://assets/game/character_showcase/profiles/profile_barber_ghost.tres",
+		"texture": "res://assets/game/enemies/barber_ghost.png",
+		"weapon": "",
+		"aura": ""
+	},
+	{
+		"name": "井中姐弟 (水生波浪蠕动)",
+		"profile": "res://assets/game/character_showcase/profiles/profile_well_sisters.tres",
+		"texture": "res://assets/game/enemies/well_sisters.png",
 		"weapon": "",
 		"aura": ""
 	},
@@ -44,7 +65,14 @@ const ROSTER := [
 		"aura": ""
 	},
 	{
-		"name": "守灯人 (Boss/领域脉冲)",
+		"name": "义庄看守 (精英/重型拖步)",
+		"profile": "res://assets/game/character_showcase/profiles/profile_mortuary_warden.tres",
+		"texture": "res://assets/game/enemies/mortuary_warden.png",
+		"weapon": "",
+		"aura": ""
+	},
+	{
+		"name": "守灯人 (Boss/命火领域脉冲)",
 		"profile": "res://assets/game/character_showcase/profiles/profile_lantern_keeper_boss.tres",
 		"texture": "res://assets/game/enemies/lantern_keeper.png",
 		"weapon": "",
@@ -73,7 +101,7 @@ func _setup_roster_buttons() -> void:
 		var entry: Dictionary = ROSTER[i]
 		var btn := Button.new()
 		btn.text = entry["name"]
-		btn.custom_minimum_size.y = 36
+		btn.custom_minimum_size.y = 34
 		btn.pressed.connect(func(): _load_character(i))
 		char_list.add_child(btn)
 
@@ -91,8 +119,13 @@ func _load_character(index: int) -> void:
 	current_char_view.texture_body = load(current_entry["texture"])
 	if not current_entry["weapon"].is_empty():
 		current_char_view.texture_weapon = load(current_entry["weapon"])
+	else:
+		current_char_view.texture_weapon = null
+		
 	if not current_entry["aura"].is_empty():
 		current_char_view.texture_aura = load(current_entry["aura"])
+	else:
+		current_char_view.texture_aura = null
 		
 	char_container.add_child(current_char_view)
 	

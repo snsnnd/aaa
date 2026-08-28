@@ -23,7 +23,7 @@ const CharacterStateMachineScript := preload("res://assets/game/character_showca
 @export var texture_weapon: Texture2D:
 	set(tex):
 		texture_weapon = tex
-		if weapon_sprite:
+		if weapon_sprite and weapon_pivot:
 			weapon_sprite.texture = tex
 			weapon_pivot.visible = (tex != null)
 @export var texture_aura: Texture2D:
@@ -39,13 +39,14 @@ const CharacterStateMachineScript := preload("res://assets/game/character_showca
 
 # Child Nodes
 @onready var state_machine: CharacterStateMachine = $StateMachine
-@onready var body_sprite: Sprite2D = $Body
 @onready var shadow_node: Polygon2D = $Shadow
-@onready var weapon_pivot: Node2D = $WeaponPivot
-@onready var weapon_sprite: Sprite2D = $WeaponPivot/WeaponSprite
-@onready var lantern_pivot: Node2D = $LanternPivot
-@onready var aura_sprite: Sprite2D = $Aura
-@onready var vfx_mount: Marker2D = $VFXMountPoint
+@onready var pivot: Node2D = $Pivot
+@onready var body_sprite: Sprite2D = $Pivot/Body
+@onready var weapon_pivot: Node2D = $Pivot/WeaponPivot
+@onready var weapon_sprite: Sprite2D = $Pivot/WeaponPivot/WeaponSprite
+@onready var lantern_pivot: Node2D = $Pivot/LanternPivot
+@onready var aura_sprite: Sprite2D = $Pivot/Aura
+@onready var vfx_mount: Marker2D = $Pivot/VFXMountPoint
 
 var _time: float = 0.0
 var _base_pos: Vector2 = Vector2.ZERO
@@ -58,12 +59,12 @@ func _ready() -> void:
 	_base_rot = rotation
 	if texture_body and body_sprite:
 		body_sprite.texture = texture_body
-	if texture_weapon and weapon_sprite:
+	if weapon_sprite and weapon_pivot:
 		weapon_sprite.texture = texture_weapon
-		weapon_pivot.visible = true
+		weapon_pivot.visible = (texture_weapon != null)
 	if texture_aura and aura_sprite:
 		aura_sprite.texture = texture_aura
-		aura_sprite.visible = true
+		aura_sprite.visible = (texture_aura != null)
 		
 	if not Engine.is_editor_hint():
 		if state_machine:
@@ -94,12 +95,12 @@ func _apply_profile_defaults() -> void:
 func on_enter_idle() -> void:
 	_kill_action_tween()
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_property(self, "position", _base_pos, 0.25)
-	tw.tween_property(self, "rotation", _base_rot, 0.25)
-	tw.tween_property(self, "scale", Vector2.ONE, 0.25)
+	tw.tween_property(pivot, "position", Vector2.ZERO, 0.25)
+	tw.tween_property(pivot, "rotation", 0.0, 0.25)
+	tw.tween_property(pivot, "scale", Vector2.ONE, 0.25)
 	tw.tween_property(body_sprite, "modulate", Color.WHITE, 0.2)
 	if weapon_pivot and weapon_pivot.visible:
-		tw.tween_property(weapon_pivot, "rotation", 0.0, 0.25)
+		tw.tween_property(weapon_pivot, "rotation", -0.45, 0.25)
 
 
 ## 阶段一：抬刀蓄势 (Raise)
@@ -107,11 +108,11 @@ func on_enter_raise() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	# 身体蓄力后撤、重心下沉
-	_action_tween.tween_property(self, "position", _base_pos + Vector2(-profile.attack_windup_px, 8.0), 0.4)
-	_action_tween.tween_property(self, "scale", Vector2(1.05, 0.95), 0.4)
+	_action_tween.tween_property(pivot, "position", Vector2(-profile.attack_windup_px, 8.0), 0.4)
+	_action_tween.tween_property(pivot, "scale", Vector2(1.05, 0.95), 0.4)
 	_action_tween.tween_property(body_sprite, "modulate", Color("ffe8e8"), 0.3)
 	if weapon_pivot and weapon_pivot.visible:
-		_action_tween.tween_property(weapon_pivot, "rotation", -0.85, 0.4)
+		_action_tween.tween_property(weapon_pivot, "rotation", -1.15, 0.4)
 
 
 ## 阶段二：快慢刀停顿与假释放 (Hold / Fake Cue)
@@ -119,7 +120,7 @@ func on_enter_hold() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	# 悬空停顿、假释放闪光预警
-	_action_tween.tween_property(self, "position", _base_pos + Vector2(-profile.attack_windup_px * 1.1, 4.0), 0.2)
+	_action_tween.tween_property(pivot, "position", Vector2(-profile.attack_windup_px * 1.1, 4.0), 0.2)
 	if weapon_pivot and weapon_pivot.visible:
 		_action_tween.tween_property(weapon_sprite, "modulate", Color("ff7a80"), 0.15)
 		_action_tween.chain().tween_property(weapon_sprite, "modulate", Color.WHITE, 0.25)
@@ -130,8 +131,8 @@ func on_enter_commit() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	# 极速前冲突刺，白芯闪耀
-	_action_tween.tween_property(self, "position:x", _base_pos.x + profile.attack_lunge_px, 0.09)
-	_action_tween.parallel().tween_property(self, "scale", Vector2(1.18, 0.88), 0.08)
+	_action_tween.tween_property(pivot, "position:x", profile.attack_lunge_px, 0.09)
+	_action_tween.parallel().tween_property(pivot, "scale", Vector2(1.18, 0.88), 0.08)
 	_action_tween.parallel().tween_property(body_sprite, "modulate", Color.WHITE, 0.08)
 	if weapon_pivot and weapon_pivot.visible:
 		_action_tween.parallel().tween_property(weapon_pivot, "rotation", 0.75, 0.09)
@@ -142,10 +143,10 @@ func on_enter_commit() -> void:
 func on_enter_recover() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	_action_tween.tween_property(self, "position", _base_pos, 0.45)
-	_action_tween.tween_property(self, "scale", Vector2.ONE, 0.45)
+	_action_tween.tween_property(pivot, "position", Vector2.ZERO, 0.45)
+	_action_tween.tween_property(pivot, "scale", Vector2.ONE, 0.45)
 	if weapon_pivot and weapon_pivot.visible:
-		_action_tween.tween_property(weapon_pivot, "rotation", 0.0, 0.45)
+		_action_tween.tween_property(weapon_pivot, "rotation", -0.45, 0.45)
 	_action_tween.chain().tween_callback(func():
 		if state_machine:
 			state_machine.transition_to(CharacterStateMachine.State.IDLE)
@@ -156,13 +157,13 @@ func on_enter_recover() -> void:
 func on_enter_hit() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	_action_tween.tween_property(self, "position:x", _base_pos.x - profile.hit_recoil_px, 0.06)
-	_action_tween.tween_property(self, "rotation", -profile.hit_tilt_rad, 0.06)
+	_action_tween.tween_property(pivot, "position:x", -profile.hit_recoil_px, 0.06)
+	_action_tween.tween_property(pivot, "rotation", -profile.hit_tilt_rad, 0.06)
 	_action_tween.tween_property(body_sprite, "modulate", Color(1.0, 0.35, 0.35), 0.06)
 	
 	_action_tween.chain().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_action_tween.tween_property(self, "position", _base_pos, 0.3)
-	_action_tween.tween_property(self, "rotation", _base_rot, 0.3)
+	_action_tween.tween_property(pivot, "position", Vector2.ZERO, 0.3)
+	_action_tween.tween_property(pivot, "rotation", 0.0, 0.3)
 	_action_tween.tween_property(body_sprite, "modulate", Color.WHITE, 0.25)
 	_action_tween.chain().tween_callback(func():
 		if state_machine:
@@ -175,8 +176,8 @@ func on_enter_stagger() -> void:
 	_kill_action_tween()
 	# 受到时空凝滞，定格并泛起冷青色符咒光晕
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	_action_tween.tween_property(self, "position:y", _base_pos.y + 18.0, 0.2)
-	_action_tween.tween_property(self, "rotation", 0.05, 0.2)
+	_action_tween.tween_property(pivot, "position:y", 18.0, 0.2)
+	_action_tween.tween_property(pivot, "rotation", 0.05, 0.2)
 	_action_tween.tween_property(body_sprite, "modulate", Color("86d6df"), 0.15)
 
 
@@ -184,7 +185,7 @@ func on_enter_stagger() -> void:
 func on_enter_death() -> void:
 	_kill_action_tween()
 	_action_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_action_tween.tween_property(self, "position:y", _base_pos.y + 40.0, 1.2)
+	_action_tween.tween_property(pivot, "position:y", 40.0, 1.2)
 	_action_tween.tween_property(body_sprite, "modulate:a", 0.0, 1.2)
 	_action_tween.tween_property(shadow_node, "modulate:a", 0.0, 1.0)
 
@@ -203,7 +204,7 @@ func _kill_action_tween() -> void:
 # -------------------------------------------------------------
 
 func update_idle_physics(_delta: float, is_staggered: bool = false) -> void:
-	if profile == null:
+	if profile == null or pivot == null:
 		return
 		
 	var mult: float = 0.2 if is_staggered else 1.0
@@ -212,25 +213,24 @@ func update_idle_physics(_delta: float, is_staggered: bool = false) -> void:
 	
 	match profile.motion_type:
 		CharacterAnimProfile.MotionType.HUMAN_GROUND:
-			body_sprite.position.y = breath_cycle * profile.breath_height
-			body_sprite.scale.y = 1.0 + breath_cycle * profile.squash_stretch
-			body_sprite.scale.x = 1.0 - breath_cycle * (profile.squash_stretch * 0.7)
-			body_sprite.rotation = sin(_time * 1.5) * profile.idle_tilt_angle
-			if lantern_pivot:
+			pivot.position.y = breath_cycle * profile.breath_height
+			pivot.scale.y = 1.0 + breath_cycle * profile.squash_stretch
+			pivot.scale.x = 1.0 - breath_cycle * (profile.squash_stretch * 0.7)
+			pivot.rotation = sin(_time * 1.5) * profile.idle_tilt_angle
+			if lantern_pivot and lantern_pivot.visible:
 				lantern_pivot.rotation = sin(_time * profile.prop_sway_freq - profile.prop_lag_phase) * profile.prop_sway_angle
-				lantern_pivot.position.y = breath_cycle * (profile.breath_height * 0.6)
 
 		CharacterAnimProfile.MotionType.FLOAT_SPIRIT:
 			var float_offset: float = breath_cycle * profile.breath_height
 			var jitter_x: float = sin(_time * profile.jitter_speed) * profile.jitter_amount_x if profile.jitter_speed > 0.0 else 0.0
-			body_sprite.position.y = float_offset
-			body_sprite.position.x = jitter_x
-			body_sprite.rotation = sin(_time * 2.0) * profile.idle_tilt_angle
+			pivot.position.y = float_offset
+			pivot.position.x = jitter_x
+			pivot.rotation = sin(_time * 2.0) * profile.idle_tilt_angle
 			if shadow_node and profile.shadow_sync:
 				var shadow_k: float = clampf(1.0 - (float_offset / 60.0), 0.5, 1.3)
 				shadow_node.scale = Vector2(shadow_k, shadow_k * 0.35)
 				shadow_node.modulate.a = clampf(0.5 - (float_offset / 80.0), 0.15, 0.65)
-			if lantern_pivot:
+			if lantern_pivot and lantern_pivot.visible:
 				lantern_pivot.rotation = sin(_time * profile.prop_sway_freq + 0.5) * profile.prop_sway_angle
 
 		CharacterAnimProfile.MotionType.RIGID_MECHANICAL:
@@ -243,18 +243,18 @@ func update_idle_physics(_delta: float, is_staggered: bool = false) -> void:
 			elif cycle < 0.75 and cycle > 0.5:
 				step_h = -sin((cycle - 0.5) * 4.0 * PI) * profile.step_lift_height
 				step_rot = -0.02
-			body_sprite.position.y = step_h
-			body_sprite.rotation = step_rot
+			pivot.position.y = step_h
+			pivot.rotation = step_rot
 
 		CharacterAnimProfile.MotionType.PAPER_FLUTTER:
 			var wind: float = sin(_time * 4.0) * 0.035 + sin(_time * 8.5) * 0.015
-			body_sprite.rotation = wind
-			body_sprite.scale.x = 1.0 + sin(_time * 3.0) * 0.03
-			body_sprite.position.y = breath_cycle * profile.breath_height
+			pivot.rotation = wind
+			pivot.scale.x = 1.0 + sin(_time * 3.0) * 0.03
+			pivot.position.y = breath_cycle * profile.breath_height
 
 		CharacterAnimProfile.MotionType.MAJESTIC_BOSS:
-			body_sprite.position.y = breath_cycle * profile.breath_height
-			body_sprite.rotation = sin(_time * 0.8) * profile.idle_tilt_angle
+			pivot.position.y = breath_cycle * profile.breath_height
+			pivot.rotation = sin(_time * 0.8) * profile.idle_tilt_angle
 			if aura_sprite and aura_sprite.visible:
 				var pulse: float = sin(_time * profile.aura_pulse_speed) * 0.5 + 0.5
 				var a_scale: float = lerpf(profile.aura_scale_range.x, profile.aura_scale_range.y, pulse)
@@ -262,12 +262,12 @@ func update_idle_physics(_delta: float, is_staggered: bool = false) -> void:
 				aura_sprite.modulate.a = lerpf(0.25, 0.55, pulse)
 
 		CharacterAnimProfile.MotionType.NERVOUS_JITTER:
-			body_sprite.position.y = breath_cycle * profile.breath_height
-			body_sprite.position.x = sin(_time * 26.0) * profile.jitter_amount_x
-			body_sprite.rotation = sin(_time * 18.0) * profile.idle_tilt_angle
+			pivot.position.y = breath_cycle * profile.breath_height
+			pivot.position.x = sin(_time * 26.0) * profile.jitter_amount_x
+			pivot.rotation = sin(_time * 18.0) * profile.idle_tilt_angle
 			
 		CharacterAnimProfile.MotionType.SLITHER_CREEP:
-			body_sprite.position.y = sin(_time * 2.8) * profile.breath_height
-			body_sprite.rotation = sin(_time * 3.2) * 0.04
-			body_sprite.scale.x = 1.0 + sin(_time * 4.0) * 0.04
-			body_sprite.scale.y = 1.0 - sin(_time * 4.0) * 0.04
+			pivot.position.y = sin(_time * 2.8) * profile.breath_height
+			pivot.rotation = sin(_time * 3.2) * 0.04
+			pivot.scale.x = 1.0 + sin(_time * 4.0) * 0.04
+			pivot.scale.y = 1.0 - sin(_time * 4.0) * 0.04

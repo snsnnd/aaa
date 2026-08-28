@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_warden_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "mortuary_warden"
+display_name = "义庄看守 (精英)"
+motion_notes = "魁梧沉重拖步、生锈锁链地面拖行顿挫、重型蓄力震地"
+motion_type = 0
+breath_speed = 1.6
+breath_height = 2.4
+squash_stretch = 0.012
+idle_tilt_angle = 0.006
+jitter_speed = 0.0
+jitter_amount_x = 0.0
+prop_sway_freq = 1.6
+prop_sway_angle = 0.04
+prop_lag_phase = 0.5
+cadence_beats = 4
+step_lift_height = 0.0
+attack_windup_px = 45.0
+attack_lunge_px = 85.0
+hit_recoil_px = 16.0
+hit_tilt_rad = 0.03
+shadow_sync = true
+aura_pulse_speed = 1.8
+aura_scale_range = Vector2(1, 1.15)

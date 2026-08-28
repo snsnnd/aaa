@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_watchman_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "watchman"
+display_name = "前任更夫"
+motion_notes = "手持敌刃蓄势慢刀、抬刀顿挫后落刀、经典教学敌招"
+motion_type = 0
+breath_speed = 2.0
+breath_height = 3.0
+squash_stretch = 0.015
+idle_tilt_angle = 0.01
+jitter_speed = 0.0
+jitter_amount_x = 0.0
+prop_sway_freq = 2.0
+prop_sway_angle = 0.08
+prop_lag_phase = 0.4
+cadence_beats = 4
+step_lift_height = 0.0
+attack_windup_px = 35.0
+attack_lunge_px = 65.0
+hit_recoil_px = 25.0
+hit_tilt_rad = 0.06
+shadow_sync = true
+aura_pulse_speed = 2.0
+aura_scale_range = Vector2(1, 1.2)

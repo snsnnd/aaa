@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterAnimProfile" load_steps=2 format=3 uid="uid://prof_sisters_01"]
+
+[ext_resource type="Script" path="res://assets/game/character_showcase/scripts/character_anim_profile.gd" id="1_script"]
+
+[resource]
+script = ExtResource("1_script")
+character_id = "well_sisters"
+display_name = "井中姐弟"
+motion_notes = "水生波浪形蠕动、湿发下垂晃荡、交替探出鬼手、湿冷下沉感"
+motion_type = 5
+breath_speed = 2.4
+breath_height = 6.0
+squash_stretch = 0.03
+idle_tilt_angle = 0.035
+jitter_speed = 0.0
+jitter_amount_x = 0.0
+prop_sway_freq = 2.4
+prop_sway_angle = 0.08
+prop_lag_phase = 0.3
+cadence_beats = 4
+step_lift_height = 0.0
+attack_windup_px = 35.0
+attack_lunge_px = 70.0
+hit_recoil_px = 30.0
+hit_tilt_rad = 0.1
+shadow_sync = true
+aura_pulse_speed = 2.0
+aura_scale_range = Vector2(1, 1.2)
