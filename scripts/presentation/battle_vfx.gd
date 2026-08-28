@@ -183,6 +183,118 @@ func parry_burst(pos: Vector2, color: Color, count: int) -> void:
 	tween.chain().tween_callback(burst.queue_free)
 
 
+func enemy_cue_fx(origin: Vector2, enemy_id: String, move_id: String, color: Color) -> void:
+	match enemy_id:
+		"lantern_imp":
+			for i in 5:
+				var spark := Polygon2D.new()
+				spark.polygon = PackedVector2Array([Vector2(0, -4), Vector2(3, 0), Vector2(0, 4), Vector2(-3, 0)])
+				spark.color = Color("f2a03c")
+				spark.position = origin + Vector2(randf_range(-50.0, 30.0), randf_range(-40.0, 10.0))
+				spark.z_index = 12
+				add_child(spark)
+				var tw := create_tween().set_parallel(true)
+				tw.tween_property(spark, "position:y", spark.position.y - randf_range(30.0, 70.0), 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+				tw.tween_property(spark, "modulate:a", 0.0, 0.5)
+				tw.chain().tween_callback(spark.queue_free)
+		"paper_apprentice":
+			for i in 4:
+				var sheet := Polygon2D.new()
+				sheet.polygon = PackedVector2Array([Vector2(-8, -11), Vector2(9, -8), Vector2(5, 11), Vector2(-9, 7)])
+				sheet.color = Color("d8ceb0")
+				sheet.position = origin + Vector2(-20, -40)
+				sheet.z_index = 12
+				add_child(sheet)
+				var a := float(i) * 1.6
+				var tw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+				tw.tween_property(sheet, "position", sheet.position + Vector2(cos(a) * 70.0, sin(a) * 46.0), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tw.tween_property(sheet, "rotation", a + 3.0, 0.5)
+				tw.tween_property(sheet, "modulate:a", 0.0, 0.5)
+				tw.chain().tween_callback(sheet.queue_free)
+		"patrol_corpse":
+			var gong := Line2D.new()
+			var gpts := PackedVector2Array()
+			for i in 25:
+				gpts.append(Vector2.RIGHT.rotated(TAU * float(i) / 24.0) * (80.0 + i * 2.0))
+			gong.points = gpts
+			gong.width = 4.0
+			gong.default_color = Color("8f7a3f", 0.7)
+			gong.position = origin + Vector2(40, -40)
+			gong.z_index = 12
+			add_child(gong)
+			var gtw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+			gtw.tween_property(gong, "scale", Vector2(1.7, 1.7), 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			gtw.tween_property(gong, "modulate:a", 0.0, 0.35)
+			gtw.chain().tween_callback(gong.queue_free)
+		"barber_ghost":
+			for a in [-0.35, 0.3]:
+				var blade := Line2D.new()
+				blade.points = PackedVector2Array([Vector2.RIGHT.rotated(a) * -70.0, Vector2.RIGHT.rotated(a) * 70.0])
+				blade.width = 5.0
+				blade.default_color = Color("e8edf0")
+				blade.position = origin + Vector2(-10, -20)
+				blade.z_index = 12
+				add_child(blade)
+				var btw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+				btw.tween_property(blade, "modulate:a", 0.0, 0.22).set_delay(0.04)
+				btw.tween_property(blade, "rotation", blade.rotation + 0.5, 0.22)
+				btw.chain().tween_callback(blade.queue_free)
+		"well_sisters":
+			for i in 3:
+				var water := Line2D.new()
+				water.points = PackedVector2Array([Vector2(0, 0), Vector2(-14, 46), Vector2(-6, 92)])
+				water.width = 5.0
+				water.default_color = Color("5a9ab0", 0.8)
+				water.position = origin + Vector2(-60 + i * 44.0, -70.0)
+				water.z_index = 12
+				add_child(water)
+				var wtw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+				wtw.tween_property(water, "modulate:a", 0.0, 0.4).set_delay(0.06 * i)
+				wtw.chain().tween_callback(water.queue_free)
+		"gambler_ghost":
+			for i in 4:
+				var die := Polygon2D.new()
+				die.polygon = PackedVector2Array([Vector2(-7, -7), Vector2(7, -7), Vector2(7, 7), Vector2(-7, 7)])
+				die.color = Color("e8dfc8")
+				die.position = origin + Vector2(randf_range(-40.0, 40.0), randf_range(-60.0, -20.0))
+				die.z_index = 12
+				add_child(die)
+				var dtw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+				dtw.tween_property(die, "position", die.position + Vector2(randf_range(-50.0, 50.0), randf_range(20.0, 60.0)), 0.45).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+				dtw.tween_property(die, "rotation", randf_range(-4.0, 4.0), 0.45)
+				dtw.tween_property(die, "modulate:a", 0.0, 0.45)
+				dtw.chain().tween_callback(die.queue_free)
+		"mortuary_warden":
+			for i in 3:
+				var link := Line2D.new()
+				link.points = PackedVector2Array([Vector2(0, 0), Vector2(-60 - i * 30.0, -6.0), Vector2(-120 - i * 34.0, 8.0)])
+				link.width = 6.0 - i
+				link.default_color = Color("57493a")
+				link.position = origin + Vector2(20, -60 + i * 26.0)
+				link.z_index = 12
+				add_child(link)
+				var ltw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+				ltw.tween_property(link, "modulate:a", 0.0, 0.32).set_delay(0.05 * i)
+				ltw.chain().tween_callback(link.queue_free)
+			fx.trauma = minf(1.0, fx.trauma + 0.18)
+		"lantern_keeper":
+			var dome := Line2D.new()
+			var dpts := PackedVector2Array()
+			for i in 33:
+				dpts.append(Vector2.RIGHT.rotated(TAU * float(i) / 32.0) * 150.0)
+			dome.points = dpts
+			dome.width = 6.0
+			dome.default_color = Color("f2d487", 0.75)
+			dome.position = origin + Vector2(-20, -20)
+			dome.z_index = 12
+			add_child(dome)
+			var dtw := create_tween().set_parallel(true).set_ignore_time_scale(true)
+			dtw.tween_property(dome, "scale", Vector2(1.35, 1.35), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			dtw.tween_property(dome, "modulate:a", 0.0, 0.5)
+			dtw.chain().tween_callback(dome.queue_free)
+			fx.glow_boost = -0.4
+
+
 func soul_motes(origin: Vector2, color: Color, rising: bool) -> void:
 	for i in 14:
 		var mote := Polygon2D.new()

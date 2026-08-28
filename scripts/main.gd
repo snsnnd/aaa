@@ -124,6 +124,7 @@ func _handle_event(event: Dictionary) -> void:
 			hud.refresh()
 		"commit_cue":
 			view.commit_flash(view.intent_color())
+			view.enemy_cue_fx(String(event.get("enemy", "")), String(event.get("intent", "")))
 		"fake_release":
 			view.fake_release()
 		"defense_queued":

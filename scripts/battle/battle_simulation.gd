@@ -76,14 +76,14 @@ const MOVES := {
 ## 敌人表：名称、血量、招式轮换（永不 RNG 抖动）。
 const ENEMIES := {
 	"watchman": {"name": "前任更夫", "hp": 46, "moves": ["red", "blue", "green"], "opening": "red"},
-	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "moves": ["quick", "red"], "opening": "quick", "reactive": true},
-	"patrol_corpse": {"name": "更练尸", "hp": 38, "moves": ["blue", "red"], "opening": "blue", "reactive": true},
-	"barber_ghost": {"name": "剃头匠", "hp": 34, "moves": ["blue", "quick"], "opening": "blue", "reactive": true},
-	"paper_apprentice": {"name": "纸扎学徒", "hp": 30, "moves": ["red", "green"], "opening": "red", "reactive": true},
-	"well_sisters": {"name": "井中姐弟", "hp": 36, "moves": ["blue", "green"], "opening": "blue", "reactive": true},
-	"gambler_ghost": {"name": "赌鬼", "hp": 34, "moves": ["quick", "blue", "red"], "opening": "quick", "reactive": true},
-	"mortuary_warden": {"name": "义庄看守", "hp": 36, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
-	"lantern_keeper": {"name": "守灯人", "hp": 40, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
+	"lantern_imp": {"name": "灯笼小鬼", "hp": 30, "dmg_mul": 0.8, "moves": ["quick", "red"], "opening": "quick", "reactive": true},
+	"patrol_corpse": {"name": "更练尸", "hp": 38, "dmg_mul": 0.9, "moves": ["blue", "red"], "opening": "blue", "reactive": true},
+	"barber_ghost": {"name": "剃头匠", "hp": 34, "dmg_mul": 1.0, "moves": ["blue", "quick"], "opening": "blue", "reactive": true},
+	"paper_apprentice": {"name": "纸扎学徒", "hp": 30, "dmg_mul": 0.9, "moves": ["red", "green"], "opening": "red", "reactive": true},
+	"well_sisters": {"name": "井中姐弟", "hp": 36, "dmg_mul": 1.0, "moves": ["blue", "green"], "opening": "blue", "reactive": true},
+	"gambler_ghost": {"name": "赌鬼", "hp": 34, "dmg_mul": 0.9, "moves": ["quick", "blue", "red"], "opening": "quick", "reactive": true},
+	"mortuary_warden": {"name": "义庄看守", "hp": 36, "dmg_mul": 1.1, "moves": ["red", "blue", "green", "quick"], "opening": "red", "reactive": true},
+	"lantern_keeper": {"name": "守灯人", "hp": 40, "dmg_mul": 1.15, "moves": ["red", "quick", "blue", "green"], "opening": "red", "reactive": true},
 }
 
 var state: BattleState = BattleState.WINDUP
@@ -265,11 +265,11 @@ func _collect_cue_events(events: Array) -> void:
 		var strikes: Array = current_intent.strikes
 		if strike_index < strikes.size() and attack_elapsed >= float(strikes[strike_index]) - 0.13 and blue_cue_index != strike_index:
 			blue_cue_index = strike_index
-			events.append({"type": "commit_cue", "intent": current_intent.id})
+			events.append({"type": "commit_cue", "intent": current_intent.id, "enemy": enemy_id})
 		return
 	if not window_announced and attack_elapsed >= float(current_intent.duration) - float(current_intent.window):
 		window_announced = true
-		events.append({"type": "commit_cue", "intent": current_intent.id})
+		events.append({"type": "commit_cue", "intent": current_intent.id, "enemy": enemy_id})
 
 
 func _collect_fake_events(events: Array) -> void:
@@ -368,8 +368,12 @@ func _resolve_impact(events: Array) -> void:
 		_:
 			perfect_charge = false
 			var damage := int(current_intent.damage)
+			damage = int(round(damage * float(ENEMIES[enemy_id].get("dmg_mul", 1.0))))
+			var enraged := enemy_hp < int(ENEMIES[enemy_id].hp) / 2
+			if enraged:
+				damage = int(round(damage * 1.15))
 			player_hp = maxi(0, player_hp - damage)
-			events.append({"type": "impact", "grade": grade, "damage": damage})
+			events.append({"type": "impact", "grade": grade, "damage": damage, "enraged": enraged})
 			if player_hp <= 0:
 				_end_battle(events)
 

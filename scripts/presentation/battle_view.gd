@@ -195,6 +195,10 @@ func bell_wave() -> void:
 	vfx.bell_wave()
 
 
+func enemy_cue_fx(enemy_id: String, move_id: String) -> void:
+	vfx.enemy_cue_fx(enemy_anim.enemy_sprite.position, enemy_id, move_id, intent_color())
+
+
 func counter_slash(charged: bool) -> void:
 	vfx.counter_slash(charged)
 
