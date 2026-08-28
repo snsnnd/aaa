@@ -19,13 +19,53 @@ extends Node2D
 
 var _elapsed: float = 0.0
 var _playing: bool = false
+var _is_standalone_run: bool = false
+var _loop_delay: float = 0.0
 
 
 func _ready() -> void:
 	if scale == Vector2.ONE and effect_scale != Vector2.ONE:
 		scale = effect_scale
+
+	# 如果玩家在 Godot 中直接对此场景按 F6 运行（作为顶层独立场景）
+	if not Engine.is_editor_hint():
+		if get_parent() == get_tree().root or get_tree().current_scene == self:
+			_is_standalone_run = true
+			auto_free = false
+			position = get_viewport_rect().size * 0.5
+			_setup_standalone_env()
+
 	if auto_start:
 		play()
+
+
+func _setup_standalone_env() -> void:
+	# 独立运行时提供深色背景与十字准心，方便看清高光粒子
+	var bg_layer := CanvasLayer.new()
+	bg_layer.layer = -10
+	add_child(bg_layer)
+	
+	var bg := ColorRect.new()
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.06, 0.07, 0.09)
+	bg_layer.add_child(bg)
+	
+	# 绘制中心准心
+	var ch := Node2D.new()
+	ch.position = get_viewport_rect().size * 0.5
+	bg_layer.add_child(ch)
+	
+	var lh := Line2D.new()
+	lh.points = PackedVector2Array([Vector2(-30, 0), Vector2(30, 0)])
+	lh.width = 1.0
+	lh.default_color = Color(0.4, 0.45, 0.5, 0.35)
+	ch.add_child(lh)
+	
+	var lv := Line2D.new()
+	lv.points = PackedVector2Array([Vector2(0, -30), Vector2(0, 30)])
+	lv.width = 1.0
+	lv.default_color = Color(0.4, 0.45, 0.5, 0.35)
+	ch.add_child(lv)
 
 
 func play() -> void:
@@ -53,10 +93,15 @@ func play() -> void:
 
 func _process(delta: float) -> void:
 	if not _playing:
+		if _is_standalone_run:
+			_loop_delay += delta
+			if _loop_delay >= 1.2:
+				_loop_delay = 0.0
+				play()
 		return
 		
 	_elapsed += delta
 	if _elapsed >= duration:
 		_playing = false
-		if auto_free and not Engine.is_editor_hint():
+		if auto_free and not Engine.is_editor_hint() and not _is_standalone_run:
 			queue_free()
