@@ -61,7 +61,8 @@ func _timeline_swing(thrust: Vector2, startup: float, impact_time: float, recove
 		var tw := host.create_tween()
 		tw.tween_property(pivot, "position", origin + windup, maxf(0.01, startup))
 		tw.tween_property(pivot, "position", origin + thrust, maxf(0.01, impact_time - startup)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-		tw.tween_property(pivot, "position", origin, maxf(0.01, recovery - (impact_time - startup))).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		# 收招段长 = recovery - impact_time：三段总时长与模拟层 recovery 严格一致
+		tw.tween_property(pivot, "position", origin, maxf(0.01, recovery - impact_time)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		return tw)
 
 

@@ -213,3 +213,10 @@
 - **Buffer 成本锁定（方案 B）+ 召符并发规则**：入队即扣费并锁定（`cost_locked`），执行不再扣、丢弃全额退还；召符仅允许 IDLE/取消窗口内（`summon_rejected{busy}`）——前摇中召符抽走缓冲费用的漏洞关闭。
 - **新增 9 项专项测试**（late 窗口外拒绝/窗口内弃招/heavy_swap 延迟窗口/缓冲等待与穿越执行/费用锁定/丢弃退款/召符并发两态），roguelike **75/75**；冒烟/三构筑/playtest 通关全过。
 - **边界结论**：至此动作系统的规则、执行、表现三层 FSM 边界全部闭合。按评审意见，架构收敛到此为止，下一步进入真人连招体验测试（用一组代表卡牌验证手感）。
+
+### D33: 评审追击修——事件 schema 漂移与 Buffer 经济 ✅
+- **P0 Buffer 覆盖退款**：单槽覆盖时先退还旧锁定费用再校验/锁定新费用；新卡费用不足时恢复旧缓冲原状并拒绝新卡（不吞钱）。测试：锁 2 被锁 1 覆盖 → 净扣 1；不足时旧缓冲原样保留。
+- **P1 action_canceled schema 统一**：卡牌取消卡牌改为 `{from: 旧卡, by: "card_cancel", to: 新卡}`（原 `by: 新卡id` 的漂移使表现层取消分支永不触发）；chain_cancel_link 测试升级为 schema 校验。
+- **P1 recovery 时序复核**：确认上一次提交的修复未真正落盘（`recovery - (impact_time - startup)` 仍在），本次改为 `recovery - impact_time`——三段 Tween 总长与模拟层 recovery 严格一致。
+- **P2 defense_blocked 去重**：遥测 match 里的 HUD 分支删除，提示只由主路由处理一次。
+- 验证：roguelike **77/77**（新增 schema 校验与两个 Buffer 经济测试）、冒烟、三构筑、playtest 通关全过。

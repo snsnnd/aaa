@@ -283,12 +283,15 @@ func _check_combo_system() -> void:
 	var ev_c := sim2.submit({"type": "play_card", "id": "zhuying"})
 	var canceled := false
 	var seamless := false
+	var schema_ok := false
 	for ev in ev_c:
 		if String(ev.get("type", "")) == "action_canceled":
 			canceled = true
+			# 事件 schema：卡牌取消卡牌 = {from: 旧卡, by: "card_cancel", to: 新卡}
+			schema_ok = String(ev.get("by", "")) == "card_cancel" and String(ev.get("to", "")) == "zhuying" and String(ev.get("from", "")) == "attack"
 		if String(ev.get("type", "")) == "action_started" and String(ev.get("transition", "")) == "seamless":
 			seamless = true
-	_check("chain_cancel_link", canceled and seamless, "canceled=%s seamless=%s" % [canceled, seamless])
+	_check("chain_cancel_link", canceled and seamless and schema_ok, "canceled=%s seamless=%s schema=%s" % [canceled, seamless, schema_ok])
 	sim2.step(0.20)  # zhuying 命中（0.20）
 	_check("chain_link_damage", sim2.enemy_hp == 37, "hp=%d" % sim2.enemy_hp)
 	# 2d) 预输入：liebo 前摇中提交 shatter → 缓冲，取消窗口开启时执行
@@ -629,6 +632,30 @@ func _check_action_permissions() -> void:
 		if String(ev.get("type", "")) == "card_summoned":
 			summon_ok = true
 	_check("perm_summon_ok_in_cancel_window", summon_ok, str(ev_m2))
+	# N) Buffer 覆盖退款：锁 2 后被锁 1 的卡覆盖 → 退 2 锁 1，总扣 = 1
+	var sim12 := BattleSimulationScript.new()
+	sim12.restart()
+	sim12.points = 9
+	sim12.hand.clear()
+	for cid in ["attack", "shatter", "zhuying"]:
+		sim12.hand.append(cid)
+	sim12.submit({"type": "play_card", "id": "attack"})       # 费 1 → 8
+	sim12.submit({"type": "play_card", "id": "shatter"})      # 缓冲锁 2 → 6
+	sim12.submit({"type": "play_card", "id": "zhuying"})      # 覆盖：退 2 → 8，锁 1 → 7
+	_check("perm_buffer_overwrite_refunds", sim12.p_queued == "zhuying" and sim12.points == 7,
+		"queued=%s points=%d" % [sim12.p_queued, sim12.points])
+	# O) 覆盖时新卡费用不足：恢复旧缓冲原状
+	var sim13 := BattleSimulationScript.new()
+	sim13.restart()
+	sim13.points = 3
+	sim13.hand.clear()
+	for cid in ["attack", "shatter", "tianping"]:
+		sim13.hand.append(cid)
+	sim13.submit({"type": "play_card", "id": "attack"})       # 费 1 → 2
+	sim13.submit({"type": "play_card", "id": "shatter"})      # 缓冲锁 2 → 0
+	sim13.submit({"type": "play_card", "id": "tianping"})     # 退 2 → 2 < 5 → 拒绝，恢复旧缓冲（回扣 2 → 0）
+	_check("perm_buffer_overwrite_insufficient", sim13.p_queued == "shatter" and sim13.points == 0,
+		"queued=%s points=%d" % [sim13.p_queued, sim13.points])
 
 
 # ————————————————————— Effect 数值完整性 —————————————————————

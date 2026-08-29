@@ -403,15 +403,23 @@ func _play_card(id: String) -> Array:
 			_start_player_action(id, events)
 		"buffer":
 			# 预输入（方案 B：意图即锁定成本）：费用在入队时锁定，
-			# 执行时不再扣费；缓冲被丢弃时全额退还。
+			# 执行时不再扣费；缓冲被丢弃或被覆盖时全额退还。
 			var buf_def: Dictionary = CardSystemScript.effective_def(id)
 			var buf_cost := int(buf_def.cost)
 			if _cards_played == 0 and bool(_mod("first_card_free", false)):
 				buf_cost = 0
-			if points < buf_cost:
-				events.append({"type": "card_rejected", "id": id, "reason": "points"})
-				return events
 			if p_queued == id:
+				return events
+			# 覆盖旧缓冲：先退还旧锁定费用，再校验新费用
+			var old_id := p_queued
+			var old_cost := p_queued_cost
+			if old_id != "":
+				points = mini(_max_points(), points + old_cost)
+			if points < buf_cost:
+				# 新卡费用不足：恢复旧缓冲原状，拒绝新卡
+				if old_id != "":
+					points -= old_cost
+				events.append({"type": "card_rejected", "id": id, "reason": "points"})
 				return events
 			p_queued = id
 			p_queued_cost = buf_cost
@@ -433,7 +441,7 @@ func _start_player_action(id: String, events: Array, locked_cost: int = -1) -> v
 		return
 	var was_canceling := p_phase == PlayerActionPhase.CANCEL
 	if was_canceling:
-		events.append({"type": "action_canceled", "from": p_card, "by": id})
+		events.append({"type": "action_canceled", "from": p_card, "by": "card_cancel", "to": id})
 	p_queued = ""
 	if locked_cost < 0:
 		points -= cost  # 缓冲路径已在入队时锁定预扣，不再重复扣

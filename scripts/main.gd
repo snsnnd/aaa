@@ -258,12 +258,6 @@ func _handle_event(event: Dictionary) -> void:
 		hud.show_message(hint, Color("9ab0a2"), 2.4)
 	# 遥测
 	match String(event.get("type", "")):
-		"defense_blocked":
-			match String(event.get("reason", "")):
-				"parry_cancel_none":
-					hud.show_message("大承诺出招——收招前不可防范", Color("c15454"), 0.9)
-				"parry_cancel_late":
-					hud.show_message("出招尚未到可衔接的时机", Color("c15454"), 0.8)
 		"defense_miss":
 			Telemetry.record_defense(String(sim.current_intent.id), 0)
 		"impact":
