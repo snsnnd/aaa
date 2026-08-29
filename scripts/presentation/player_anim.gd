@@ -20,6 +20,13 @@ var pose_x := 0.0
 var pose_rot := 0.0
 var animation_time := 0.0
 var talismans: Array[Node2D] = []
+# 姿态语言通道（由 PlayerActionController 逐帧下发）
+var action_pose: Dictionary = {}
+var action_weight := 0.0
+# 灯笼二级物理：身体位移速度驱动摆动惯性
+var _lantern_spring := 0.0
+var _prev_pivot_x := 0.0
+var _pose_ln := 0.0  # 动作灯笼通道（_update_combat_pose 计算，tick 内叠加）
 
 
 func setup(state: FxState) -> void:
@@ -120,6 +127,12 @@ func cast_card_action(card_id: String) -> void:
 	tw.tween_property(player_sprite, "scale", Vector2(0.49, 0.49), 0.16)
 
 
+## 动作控制器下发当前姿态通道与混合权重。
+func set_action_pose(pose: Dictionary, weight: float) -> void:
+	action_pose = pose
+	action_weight = clampf(weight, 0.0, 1.0)
+
+
 func tick(delta: float) -> void:
 	animation_time += delta
 	var s := sim_ref()
@@ -132,8 +145,16 @@ func tick(delta: float) -> void:
 	_update_combat_pose(delta)
 	fx.glow_boost = lerpf(fx.glow_boost, 0.0, minf(1.0, delta * 3.0))
 	var flicker := sin(animation_time * 9.7) * 0.08 + sin(animation_time * 15.1) * 0.04
-	if lantern_pivot and lantern_sprite.visible and anim_profile and anim_profile.prop_sway_angle > 0.0:
-		lantern_pivot.rotation = sin(animation_time * anim_profile.prop_sway_freq - anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
+	if lantern_pivot and lantern_sprite.visible:
+		var sway := 0.0
+		if anim_profile and anim_profile.prop_sway_angle > 0.0:
+			sway = sin(animation_time * anim_profile.prop_sway_freq - anim_profile.prop_lag_phase) * anim_profile.prop_sway_angle
+		# 二级物理：身体水平速度驱动灯笼惯性摆动（弹簧收敛）
+		var body_vel := (player_pivot.position.x - _prev_pivot_x) / maxf(0.0001, delta)
+		var target := clampf(-body_vel * 0.0016, -0.55, 0.55)
+		_lantern_spring = lerpf(_lantern_spring, target, minf(1.0, delta * 6.0))
+		lantern_pivot.rotation = sway + _lantern_spring + _pose_ln
+	_prev_pivot_x = player_pivot.position.x
 	lantern_glow.position = player_pivot.position + Vector2(64, 114) + (Vector2(sin(lantern_pivot.rotation) * 45.0, 0.0) if lantern_pivot else Vector2.ZERO)
 	lantern_glow.scale = Vector2.ONE * (2.35 * (1.0 + 0.38 * fx.glow_boost))
 	lantern_glow.modulate.a = clampf((0.76 + flicker) * (1.0 + 0.5 * fx.glow_boost), 0.18, 1.0)
@@ -160,8 +181,20 @@ func _update_combat_pose(delta: float) -> void:
 	pose_rot = lerpf(pose_rot, target_rot, minf(1.0, delta * 12.0))
 	fx.impulse_x = lerpf(fx.impulse_x, 0.0, minf(1.0, delta * 6.5))
 	fx.impulse_rot = lerpf(fx.impulse_rot, 0.0, minf(1.0, delta * 8.0))
-	player_pivot.position = Vector2(264.0 + pose_x + fx.impulse_x, 355.0)
-	player_pivot.rotation = pose_rot + fx.impulse_rot
+	# 姿态语言通道混合（动作权重 w：起手淡入，收招淡出）
+	var w := action_weight
+	var rx := float(action_pose.get("rx", 0.0)) * w
+	var ry := float(action_pose.get("ry", 0.0)) * w
+	var rr := float(action_pose.get("rr", 0.0)) * w
+	var br := float(action_pose.get("br", 0.0)) * w
+	var sx := lerpf(1.0, float(action_pose.get("sx", 1.0)), w)
+	var sy := lerpf(1.0, float(action_pose.get("sy", 1.0)), w)
+	var ln := float(action_pose.get("ln", 0.0)) * w
+	_pose_ln = ln
+	player_pivot.position = Vector2(264.0 + pose_x + fx.impulse_x + rx, 355.0 + ry)
+	player_pivot.rotation = pose_rot + fx.impulse_rot + rr
+	player_sprite.rotation += br  # 叠加在呼吸摆动之上
+	player_sprite.scale = Vector2(0.49, 0.49) * Vector2(sx, sy)
 
 
 func _update_talisman_trails() -> void:

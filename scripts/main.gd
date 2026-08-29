@@ -95,6 +95,7 @@ func _process(delta: float) -> void:
 		return
 	if hud.menu_open:
 		return
+	player_action.tick(delta)  # 动作姿态轨道先求值，供视图应用
 	view.tick(delta)
 	for event: Dictionary in sim.step(delta):
 		_handle_event(event)
@@ -269,7 +270,8 @@ func _handle_event(event: Dictionary) -> void:
 	match String(event.get("type", "")):
 		"action_started":
 			player_action.on_action_started(String(event.get("transition", "")), String(event.get("movement", "none")), int(event.get("vfx_tier", 0)),
-				float(event.get("startup", 0.1)), float(event.get("impact_time", 0.2)), float(event.get("recovery", 0.3)))
+				float(event.get("startup", 0.1)), float(event.get("impact_time", 0.2)), float(event.get("recovery", 0.3)),
+				String(event.get("action", "")))
 			# 挥砍音：重位移动作用重 whoosh；音调微移在 play_sfx 内做变化
 			var swing := "swing_heavy" if String(event.get("movement", "none")) in ["lunge", "leap", "dash"] else "swing_light"
 			view.play_sfx(swing, -8.0)
@@ -288,6 +290,9 @@ func _handle_event(event: Dictionary) -> void:
 				hud.show_message("动作被打断！", Color("d85151"), 0.8)
 			elif cancel_reason == "parry":
 				pass  # 弃招转防反：成功/完美提示随后即到
+		"combo_opened":
+			player_action.on_parry(int(event.get("perfect", 0)) == 1,
+				sim.p_phase != BattleSimulationScript.PlayerActionPhase.IDLE)
 		"action_impact":
 			enemy_reaction.react(String(event.get("level", "LIGHT")), int(event.get("vfx_tier", 0)))
 			if bool(event.get("finisher", false)):

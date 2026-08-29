@@ -220,3 +220,12 @@
 - **P1 recovery 时序复核**：确认上一次提交的修复未真正落盘（`recovery - (impact_time - startup)` 仍在），本次改为 `recovery - impact_time`——三段 Tween 总长与模拟层 recovery 严格一致。
 - **P2 defense_blocked 去重**：遥测 match 里的 HUD 分支删除，提示只由主路由处理一次。
 - 验证：roguelike **77/77**（新增 schema 校验与两个 Buffer 经济测试）、冒烟、三构筑、playtest 通关全过。
+
+### D34: 姿态语言——从位移 Tween 到逐帧姿态轨道（动作优先，特效后置）✅
+- **Pose 通道化**：玩家角色拆出可动画通道——根位移(rx/ry)/根倾角(rr)/身体倾角(br)/身体挤压拉伸(sx/sy)/灯笼摆角(ln)。`player_pose_library.gd` 定义 20 个命名姿态（idle/guard/parry_high/crouch 蓄/raise_high 举/overhead_end 劈落/lunge_ext 突进/左右收/thrust_ext 刺/cast 施/retreat/leap/hurt/recover）。
+- **动作轨道**：每动作三段关键帧（起手蓄 → 命中 → 收招），时间与模拟层同源（startup/impact_time/recovery，含 seamless 缩放）；签名动作（还刃/天平/撞钟/镇煞/借刀等 9 个）手工覆盖，其余由 entry/exit/movement 语义自动生成。
+- **逐帧求值替代 Tween**：PlayerActionController.tick 每帧插值轨道并下发，player_anim 统一与呼吸/战斗姿态/受击冲量混合（action_weight 淡入淡出）——可打断、可取消、FSM 与视觉严格同步。
+- **缓动语言**：蓄力段 EASE_IN（慢蓄）→ 命中段 ease-out expo（骤放）→ 收招段 ease-out quad（缓回）。
+- **灯笼二级物理**：身体水平速度驱动灯笼惯性摆动（弹簧收敛），动作甩灯通道叠加——廉价但极大提升"活"感。
+- **防反/受击轨道**：完美防反 parry_high 余韵（0.42s）/普通 0.30s；受击 hurt 踉跄轨道；动作执行中不覆盖出招姿态。
+- 验证：roguelike 77/77、冒烟、三构筑、playtest 通关全过。下一步：按《ACTION_POSE_SPEC》生图对比 → 特效与音频跟进。
