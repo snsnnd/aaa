@@ -93,6 +93,8 @@ var p_action := {}              # 动作定义（含 startup/impact_time/recover
 var p_combo := {}               # 本次动作的 ComboResult
 var p_elapsed := 0.0
 var p_queued := ""              # 预输入缓冲（单槽，后输入覆盖先输入）
+var p_queued_cost := 0          # 缓冲时锁定的费用（方案 B：意图即锁定）
+var p_cancel_fired := false     # 缓冲是否已在取消窗口开启帧执行过
 ## 局外修饰：遗物 mods + 难度修饰 + 反应辅助。由 RunFlow/apply_run_config 写入。
 var run_mods: Dictionary = {}
 ## 剧情旗标（RunState.flags 的只读投影）。
@@ -189,6 +191,8 @@ func restart(hp: int = -1) -> void:
 	p_combo = {}
 	p_elapsed = 0.0
 	p_queued = ""
+	p_queued_cost = 0
+	p_cancel_fired = false
 	_reset_stats()
 	defense_log.clear()
 	queued_defense = DefenseGrade.NONE
@@ -294,6 +298,7 @@ func _scry_pick(index: int) -> Array:
 
 func _summon_card() -> Array:
 	var events: Array = []
+	_step_player_action(0.0, events)  # 状态归一化：到期未落账的收招先处理
 	var permission: Dictionary = ActionPermissionScript.can_summon(self)
 	if not bool(permission["ok"]):
 		events.append({"type": "summon_rejected", "reason": String(permission["reason"])})
@@ -365,10 +370,18 @@ func _step_player_action(delta: float, events: Array) -> void:
 			if p_elapsed >= float(p_action.get("impact_time", 0.2)):
 				p_phase = PlayerActionPhase.CANCEL
 				_resolve_action_impact(events)
-				# 预输入在取消窗口开启瞬间执行（命中确认取消）；无窗口则不执行
-				_try_execute_queued(events)
+				# 命中帧即已开窗（多数动作）：立即执行缓冲（命中确认取消）
+				if ActionPermissionScript.cancel_window_open(self):
+					p_cancel_fired = true
+					_try_execute_queued(events)
 		PlayerActionPhase.CANCEL:
 			p_elapsed += delta
+			# 延迟开启的取消窗口（heavy_swap 放大后 cancel_start > impact_time）：
+			# 穿过 _cancel_start 的那一帧执行缓冲，不能等收招结束才丢弃
+			if not p_cancel_fired and p_elapsed < float(p_action.get("recovery", 0.3)) \
+					and ActionPermissionScript.cancel_window_open(self):
+				p_cancel_fired = true
+				_try_execute_queued(events)
 			if p_elapsed >= float(p_action.get("recovery", 0.3)):
 				_finish_player_action(events)
 
@@ -389,28 +402,41 @@ func _play_card(id: String) -> Array:
 		"cancel":
 			_start_player_action(id, events)
 		"buffer":
-			# 预输入：前摇/收招中提交的下一张牌存入缓冲（单槽，后输入覆盖），
-			# 必须等合法取消窗口开启后才执行；cancel_window == 0 的动作不会执行缓冲
-			if p_queued != id:
-				p_queued = id
-				events.append({"type": "action_buffered", "id": id})
+			# 预输入（方案 B：意图即锁定成本）：费用在入队时锁定，
+			# 执行时不再扣费；缓冲被丢弃时全额退还。
+			var buf_def: Dictionary = CardSystemScript.effective_def(id)
+			var buf_cost := int(buf_def.cost)
+			if _cards_played == 0 and bool(_mod("first_card_free", false)):
+				buf_cost = 0
+			if points < buf_cost:
+				events.append({"type": "card_rejected", "id": id, "reason": "points"})
+				return events
+			if p_queued == id:
+				return events
+			p_queued = id
+			p_queued_cost = buf_cost
+			points -= buf_cost
+			events.append({"type": "action_buffered", "id": id, "cost_locked": buf_cost})
 	return events
 
 
 ## 动作起手：扣费、连招解析、进入 STARTUP。效果延迟到命中帧结算。
-func _start_player_action(id: String, events: Array) -> void:
+func _start_player_action(id: String, events: Array, locked_cost: int = -1) -> void:
 	var def: Dictionary = CardSystemScript.effective_def(id)
 	var cost := int(def.cost)
 	if _cards_played == 0 and bool(_mod("first_card_free", false)):
 		cost = 0
-	if points < cost:
+	if locked_cost >= 0:
+		cost = locked_cost  # 缓冲时已锁定并预扣
+	elif points < cost:
 		events.append({"type": "card_rejected", "id": id, "reason": "points"})
 		return
 	var was_canceling := p_phase == PlayerActionPhase.CANCEL
 	if was_canceling:
 		events.append({"type": "action_canceled", "from": p_card, "by": id})
 	p_queued = ""
-	points -= cost
+	if locked_cost < 0:
+		points -= cost  # 缓冲路径已在入队时锁定预扣，不再重复扣
 	stats.points_spent = int(stats.get("points_spent", 0)) + cost
 	stats.cards_played = _cards_played + 1
 	_cards_played += 1
@@ -435,6 +461,7 @@ func _start_player_action(id: String, events: Array) -> void:
 	p_combo = combo_result
 	p_elapsed = 0.0
 	p_phase = PlayerActionPhase.STARTUP
+	p_cancel_fired = false
 	action_state.current_action = String(action_def["id"])
 	action_state.combo_level = int(combo_result["combo_level"])
 	action_state.combo_timer = 0.0
@@ -489,10 +516,13 @@ func _try_execute_queued(events: Array) -> void:
 	if not ActionPermissionScript.cancel_window_open(self):
 		return
 	var id := p_queued
+	var locked_cost := p_queued_cost
 	p_queued = ""
+	p_queued_cost = 0
 	if hand.has(id):
-		_start_player_action(id, events)
+		_start_player_action(id, events, locked_cost)
 	else:
+		points = mini(_max_points(), points + locked_cost)  # 退款
 		events.append({"type": "card_rejected", "id": id, "reason": "not_in_hand"})
 
 
@@ -500,9 +530,11 @@ func _finish_player_action(events: Array) -> void:
 	if p_phase == PlayerActionPhase.IDLE:
 		return
 	if p_queued != "":
-		# 缓冲牌未等到合法取消窗口：显式丢弃（卡未扣费，仍在手牌）
-		events.append({"type": "action_buffered_dropped", "id": p_queued})
+		# 缓冲牌未等到合法取消窗口：显式丢弃并退还锁定费用（卡仍在手牌）
+		points = mini(_max_points(), points + p_queued_cost)
+		events.append({"type": "action_buffered_dropped", "id": p_queued, "refund": p_queued_cost})
 		p_queued = ""
+		p_queued_cost = 0
 	events.append({"type": "action_finished", "id": p_card, "recovery_mul": float(p_combo.get("recovery_mul", 1.0))})
 	p_phase = PlayerActionPhase.IDLE
 	p_card = ""
@@ -562,12 +594,21 @@ func _attempt_defense() -> Array:
 		if String(permission["reason"]) == "cooldown":
 			events.append({"type": "defense_blocked"})
 		return events
-	# 防反取消自己动作：按当前动作的 parry_cancel 策略
+	# 防反取消自己动作：按当前动作的 parry_cancel 策略——攻击与防反不并行
+	#   ANY  : 随时弃招转防反
+	#   LATE : 仅取消窗口内可防反（同时弃招）；窗口外防反被拒绝
+	#   NONE : 动作执行中禁止防反（大承诺动作的承诺）
 	if p_phase != PlayerActionPhase.IDLE:
 		var policy := ActionPermissionScript.parry_cancel_policy(p_action)
-		if policy == ActionPermissionScript.PARRY_ANY:
-			events.append({"type": "action_canceled", "from": p_card, "by": "parry"})
-			_finish_player_action(events)
+		if policy == ActionPermissionScript.PARRY_NONE:
+			events.append({"type": "defense_blocked", "reason": "parry_cancel_none"})
+			return events
+		if policy == ActionPermissionScript.PARRY_LATE and not ActionPermissionScript.cancel_window_open(self):
+			events.append({"type": "defense_blocked", "reason": "parry_cancel_late"})
+			return events
+		# ANY，或 LATE 且在取消窗口内：弃招转防反
+		events.append({"type": "action_canceled", "from": p_card, "by": "parry"})
+		_finish_player_action(events)
 	if bool(current_intent.get("unblockable", false)):
 		if points >= 2:
 			points -= 2

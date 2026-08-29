@@ -204,3 +204,12 @@
 - **反馈分层落地**（game-feel skill: importance tiers + ACTION_FEEL_RESEARCH 要素 1/7）：`feedback_tiers.gd` 把受击层级映射到 hitstop（HEAVY 以上才停时间，0.05–0.12s，real-time timer 恢复）+ 震屏强度 + SFX 音量。
 - **音效反馈补位**（手感链条最后通道，程序化合成 `tools/generate_sfx.py`）：挥砍 whoosh（轻/重）、命中四档（crunch/thud/boom）、终结 boom、完美防反打铁 ding、预输入/取消 tick——每音效 3 变体轮换 + 音调微移防重复感。
 - **验证**：新增 8 项权限/中断/缓冲专项测试（零窗口不取消/ANY 弃招/NONE 不弃招/受击中断/霸体继续/开招基准收招/seamless 更快/缓冲恰好执行一次），roguelike **62/62**；冒烟、三构筑、playtest 通关全过。
+
+### D32: FSM 边界收敛（评审 P0/P1 全项）✅
+- **PARRY_LATE/NONE 真正落实**：ANY=随时弃招转防反；LATE=仅取消窗口内可防反（弃招），窗口外 `defense_blocked{parry_cancel_late}`；NONE=动作执行中禁止防反（`defense_blocked{parry_cancel_none}`）。攻击与防反不再并行——NONE 的大承诺动作是真正的承诺，表现层配两句拒绝文案。
+- **延迟取消窗口的 Buffer 不再被吞**：`p_cancel_fired` 标记 + CANCEL 分支逐帧检测穿越 `_cancel_start()`——heavy_swap 放大后 cancel_start(0.442) > impact(0.36) 的动作，缓冲在穿越帧执行（专项测试 K）。
+- **表现层 recovery 时序修正**：收招段长改为 `recovery - impact_time`，动作总时长与模拟层严格一致（原先多了 startup，会"规则已解锁、动画还在收"）。
+- **action_canceled 真正接管表现**：`on_action_canceled(reason)` 按 hit（受击踉跄）/parry（转戒备）/card_cancel（新动作经 MotionChannel 接管）分流，先 stop player_pivot 通道——受击取消后不再"人已挨打、动作还在挥"。
+- **Buffer 成本锁定（方案 B）+ 召符并发规则**：入队即扣费并锁定（`cost_locked`），执行不再扣、丢弃全额退还；召符仅允许 IDLE/取消窗口内（`summon_rejected{busy}`）——前摇中召符抽走缓冲费用的漏洞关闭。
+- **新增 9 项专项测试**（late 窗口外拒绝/窗口内弃招/heavy_swap 延迟窗口/缓冲等待与穿越执行/费用锁定/丢弃退款/召符并发两态），roguelike **75/75**；冒烟/三构筑/playtest 通关全过。
+- **边界结论**：至此动作系统的规则、执行、表现三层 FSM 边界全部闭合。按评审意见，架构收敛到此为止，下一步进入真人连招体验测试（用一组代表卡牌验证手感）。

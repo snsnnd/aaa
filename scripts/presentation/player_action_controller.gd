@@ -25,8 +25,31 @@ func on_action_started(transition: String, movement: String, vfx_tier: int, star
 		_heavy_sag()
 
 
-func on_action_canceled() -> void:
-	_chain_flash(1)
+## 动作被取消（受击/防反）：立即接管运动通道并落到对应姿态。
+## reason: "hit" → 受击踉跄；"parry" → 转戒备；"card_cancel"（新卡衔接）→ 不处理，由新动作接管。
+func on_action_canceled(reason: String) -> void:
+	if view == null:
+		return
+	view.motion.stop("player_pivot")
+	var pivot: Node2D = view.player_anim.player_pivot
+	var origin: Vector2 = pivot.position
+	match reason:
+		"hit":
+			# 受击踉跄：后坠下沉再回位
+			view.motion.play("player_pivot", func(host: Node) -> Tween:
+				var tw := host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tw.tween_property(pivot, "position", origin + Vector2(26, 14), 0.09)
+				tw.tween_property(pivot, "position", origin, 0.30).set_ease(Tween.EASE_IN_OUT)
+				return tw)
+		"parry":
+			# 转戒备：小步回到防御位
+			view.motion.play("player_pivot", func(host: Node) -> Tween:
+				var tw := host.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tw.tween_property(pivot, "position", origin + Vector2(-6, 0), 0.10)
+				tw.tween_property(pivot, "position", origin, 0.20)
+				return tw)
+		_:
+			pass  # card_cancel：新动作已通过 MotionChannel 接管
 
 
 ## 按动作时间轴分段驱动：前摇向后蓄 → 命中冲到位移点（与 impact_time 同步）→ 收招缓回。

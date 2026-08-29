@@ -48,6 +48,8 @@ static func can_defend(sim) -> Dictionary:
 
 
 ## 是否可以召符。
+## 并发规则：召符是即时资源动作，仅允许在 IDLE 或取消窗口内执行
+## （前摇/收招中召符会抽走缓冲牌已锁定的费用，禁止）。
 static func can_summon(sim) -> Dictionary:
 	if sim.state == sim.BattleState.VICTORY or sim.state == sim.BattleState.DEFEAT:
 		return {"ok": false, "reason": "ended"}
@@ -55,6 +57,8 @@ static func can_summon(sim) -> Dictionary:
 		return {"ok": false, "reason": "hand_full"}
 	if not sim.scry_options.is_empty():
 		return {"ok": false, "reason": "scrying"}
+	if sim.p_phase != sim.PlayerActionPhase.IDLE and not cancel_window_open(sim):
+		return {"ok": false, "reason": "busy"}
 	var scost: int = sim.SUMMON_COST - (1 if sim.perfect_charge else 0)
 	if sim.points < scost:
 		return {"ok": false, "reason": "points"}

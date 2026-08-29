@@ -258,6 +258,12 @@ func _handle_event(event: Dictionary) -> void:
 		hud.show_message(hint, Color("9ab0a2"), 2.4)
 	# 遥测
 	match String(event.get("type", "")):
+		"defense_blocked":
+			match String(event.get("reason", "")):
+				"parry_cancel_none":
+					hud.show_message("大承诺出招——收招前不可防范", Color("c15454"), 0.9)
+				"parry_cancel_late":
+					hud.show_message("出招尚未到可衔接的时机", Color("c15454"), 0.8)
 		"defense_miss":
 			Telemetry.record_defense(String(sim.current_intent.id), 0)
 		"impact":
@@ -279,8 +285,15 @@ func _handle_event(event: Dictionary) -> void:
 			view.play_sfx("buffer", -6.0)
 			hud.show_message("预输入 · %s" % CardSystemScript.title_of(String(event.id)), Color("9caaa9"), 0.6)
 		"action_canceled":
-			view.play_sfx("cancel", -6.0)
-			hud.show_message("取消衔接 → %s" % CardSystemScript.title_of(String(event.get("by", ""))), Color("7fc5cd"), 0.7)
+			var cancel_reason := String(event.get("by", ""))
+			player_action.on_action_canceled(cancel_reason)
+			if cancel_reason == "card_cancel":
+				view.play_sfx("cancel", -6.0)
+				hud.show_message("取消衔接 → %s" % CardSystemScript.title_of(String(event.get("to", ""))), Color("7fc5cd"), 0.7)
+			elif cancel_reason == "hit":
+				hud.show_message("动作被打断！", Color("d85151"), 0.8)
+			elif cancel_reason == "parry":
+				pass  # 弃招转防反：成功/完美提示随后即到
 		"action_impact":
 			enemy_reaction.react(String(event.get("level", "LIGHT")), int(event.get("vfx_tier", 0)))
 			if bool(event.get("finisher", false)):
@@ -327,6 +340,12 @@ func _handle_event(event: Dictionary) -> void:
 		"hand_changed":
 			hud.rebuild_hand()
 			hud.refresh()
+		"defense_blocked":
+			match String(event.get("reason", "")):
+				"parry_cancel_none":
+					hud.show_message("大承诺出招——收招前不可防范", Color("c15454"), 0.9)
+				"parry_cancel_late":
+					hud.show_message("出招尚未到可衔接的时机", Color("c15454"), 0.8)
 		"defense_miss":
 			view.defense_miss_fx(bool(event.get("unblockable", false)))
 			var unblockable := bool(event.get("unblockable", false))

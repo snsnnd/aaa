@@ -507,13 +507,14 @@ func _check_action_permissions() -> void:
 	# G) Seamless 确实比普通连接更快：recovery_mul 实际缩放时间轴
 	var sim6 := BattleSimulationScript.new()
 	sim6.restart()
-	var base_recovery := float(ActionCatalogScript.ACTIONS["act_attack"]["recovery"])
+	var base_recovery := float(ActionCatalogScript.ACTIONS["act_zhijian"]["recovery"])
 	sim6.points = 9
 	sim6.hand.clear()
 	sim6.hand.append("attack")
 	sim6.submit({"type": "play_card", "id": "attack"})  # open：mul 1.0
 	_check("perm_open_recovery_base", absf(float(sim6.p_action["recovery"]) - base_recovery) < 0.001,
 		"recovery=%.3f" % float(sim6.p_action["recovery"]))
+	sim6.step(0.3)  # 第一击完整收招
 	sim6.action_state.current_pose = "parry_exit"
 	sim6.action_state.combo_level = 1
 	sim6.action_state.combo_timer = 1.0
@@ -534,16 +535,100 @@ func _check_action_permissions() -> void:
 	sim7.submit({"type": "play_card", "id": "zhuying"})  # 前摇中缓冲
 	var started_count := 0
 	var impact_count := 0
-	var evs_h := sim7.step(0.30)  # 攻击命中帧 0.22 → 缓冲的 zhuying 在取消窗口执行
+	var evs_h := sim7.step(0.25)  # 命中帧 0.22 → 缓冲的 zhuying 立即在取消窗口执行
 	for ev in evs_h:
 		if String(ev.get("type", "")) == "action_started" and String(ev.get("id", "")) == "zhuying":
 			started_count += 1
+	var evs_h2 := sim7.step(0.30)  # zhuying 命中帧（起手后 0.20）
+	for ev in evs_h2:
 		if String(ev.get("type", "")) == "action_impact" and String(ev.get("id", "")) == "zhuying":
 			impact_count += 1
 	_check("perm_queue_executes_once", started_count == 1 and sim7.p_card == "zhuying",
 		"started=%d p_card=%s" % [started_count, sim7.p_card])
-	sim7.step(0.4)
-	_check("perm_queue_impact_once", impact_count == 1 and sim7.enemy_hp == 46 - 5 - 4, "hp=%d" % sim7.enemy_hp)
+	_check("perm_queue_impact_once", impact_count == 1 and sim7.enemy_hp == 46 - 5 - 4,
+		"impacts=%d hp=%d" % [impact_count, sim7.enemy_hp])
+	# I) LATE 窗口外：防反被拒绝（攻击与防反不并行）
+	var sim8 := BattleSimulationScript.new()
+	sim8.restart()
+	sim8.points = 9
+	sim8.hand.clear()
+	for cid in ["attack", "guard"]:
+		sim8.hand.append(cid)
+	sim8.submit({"type": "play_card", "id": "attack"})  # LATE：前摇 0.22 内不可防反
+	var ev_i := sim8.submit({"type": "defend"})
+	var blocked_late := false
+	for ev in ev_i:
+		if String(ev.get("type", "")) == "defense_blocked" and String(ev.get("reason", "")) == "parry_cancel_late":
+			blocked_late = true
+	_check("perm_parry_cancel_late_blocks", blocked_late and sim8.queued_defense == BattleSimulationScript.DefenseGrade.NONE
+		and sim8.p_phase == BattleSimulationScript.PlayerActionPhase.STARTUP,
+		"blocked=%s" % blocked_late)
+	# J) LATE 窗口内：防反被允许并弃招
+	sim8.defense_cooldown = 0.0
+	sim8.step(0.23)  # 越过命中帧 0.22，进入取消窗口（recovery 0.28）
+	var ev_j := sim8.submit({"type": "defend"})
+	var canceled_late := false
+	for ev in ev_j:
+		if String(ev.get("type", "")) == "action_canceled" and String(ev.get("by", "")) == "parry":
+			canceled_late = true
+	_check("perm_parry_cancel_late_window", canceled_late and sim8.p_phase == BattleSimulationScript.PlayerActionPhase.IDLE,
+		"canceled=%s" % canceled_late)
+	# K) 延迟取消窗口：heavy_swap 放大后 cancel_start(0.442) > impact(0.36)，缓冲在穿越帧执行
+	var sim9 := BattleSimulationScript.new()
+	sim9.restart()
+	sim9.points = 9
+	sim9.hand.clear()
+	for cid in ["shatter", "attack"]:
+		sim9.hand.append(cid)
+	# heavy_swap：right → shatter(high) 不在顺势表 → mul 1.3
+	sim9.action_state.current_pose = "right"
+	sim9.action_state.combo_level = 1
+	sim9.action_state.combo_timer = 1.0
+	sim9.submit({"type": "play_card", "id": "shatter"})
+	_check("perm_heavy_swap_delays_window", float(sim9.p_action["recovery"]) > 0.55,
+		"recovery=%.3f" % float(sim9.p_action["recovery"]))
+	sim9.submit({"type": "play_card", "id": "attack"})  # 前摇中缓冲（费用锁定）
+	sim9.step(0.40)  # 命中 0.36 已过，但窗口 0.442 未开
+	_check("perm_buffer_waits_for_window", sim9.p_card == "shatter" and sim9.p_queued == "attack",
+		"p_card=%s queued=%s" % [sim9.p_card, sim9.p_queued])
+	sim9.step(0.06)  # 穿过 0.442 → 缓冲执行
+	_check("perm_buffer_fires_on_cross", sim9.p_card == "attack", "p_card=%s" % sim9.p_card)
+	# L) 缓冲费用锁定：入队即扣、丢弃即退
+	var sim10 := BattleSimulationScript.new()
+	sim10.restart()
+	sim10.points = 9
+	sim10.hand.clear()
+	for cid in ["tianping", "attack"]:
+		sim10.hand.append(cid)
+	sim10.submit({"type": "play_card", "id": "tianping"})  # 费 5 → 4
+	var pts_after_lock := sim10.points
+	sim10.submit({"type": "play_card", "id": "attack"})    # 缓冲锁 1 → 3
+	_check("perm_buffer_cost_locked", sim10.p_queued == "attack" and sim10.points == pts_after_lock - 1,
+		"points=%d" % sim10.points)
+	sim10.step(0.70)
+	sim10.step(0.10)  # 收招落账 → 缓冲丢弃退款
+	_check("perm_buffer_drop_refunds", sim10.points == pts_after_lock and sim10.p_queued == "",
+		"points=%d" % sim10.points)
+	# M) 召符并发：前摇中拒绝，取消窗口内允许
+	var sim11 := BattleSimulationScript.new()
+	sim11.restart()
+	sim11.points = 9
+	sim11.hand.clear()
+	sim11.hand.append("attack")
+	sim11.submit({"type": "play_card", "id": "attack"})
+	var ev_m := sim11.submit({"type": "summon"})
+	var busy := false
+	for ev in ev_m:
+		if String(ev.get("type", "")) == "summon_rejected" and String(ev.get("reason", "")) == "busy":
+			busy = true
+	_check("perm_summon_busy_in_startup", busy, str(ev_m))
+	sim11.step(0.23)  # 取消窗口
+	var ev_m2 := sim11.submit({"type": "summon"})
+	var summon_ok := false
+	for ev in ev_m2:
+		if String(ev.get("type", "")) == "card_summoned":
+			summon_ok = true
+	_check("perm_summon_ok_in_cancel_window", summon_ok, str(ev_m2))
 
 
 # ————————————————————— Effect 数值完整性 —————————————————————
