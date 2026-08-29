@@ -14,6 +14,7 @@
 | [CARD_ACQUISITION.md](CARD_ACQUISITION.md) | 战斗内抽牌循环与战后怨契三选一 | v0.1 已定稿 |
 | [GAME_FEEL_RESEARCH.md](GAME_FEEL_RESEARCH.md) | 对标游戏手感调研（只狼/九日/匹诺曹/Eden 等）与补强路线 | 调研完成 2026-08-29 |
 | [ACTION_FEEL_RESEARCH.md](ACTION_FEEL_RESEARCH.md) | 格斗/动作手感调研（帧学/取消系统/Roman Cancel/连招表达） | 调研完成 2026-08-29 |
+| [ACTION_POSE_SPEC.md](ACTION_POSE_SPEC.md) | 玩家动作姿态规范：20 姿态词汇 + 全动作三段轨道（生图对照用） | v1 已定稿 |
 | [STS2_CODE_RESEARCH.md](STS2_CODE_RESEARCH.md) | 杀戮尖塔 2 代码架构研究与本项目启示 | 研究快照 2026-08-27 |
 
 ## 一句话概念
