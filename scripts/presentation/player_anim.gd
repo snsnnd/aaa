@@ -125,10 +125,26 @@ func cast_card_action(card_id: String) -> void:
 	tw.tween_property(player_sprite, "scale", Vector2(0.49, 0.49), 0.16)
 
 
+var _base_body_texture: Texture2D = null
+
+## 替换帧后端：切换身体贴图（"" = 回落基础贴图）。
+func set_body_frame(tex_path: String) -> void:
+	if tex_path == "":
+		if _base_body_texture and player_sprite.texture != _base_body_texture:
+			player_sprite.texture = _base_body_texture
+		return
+	if ResourceLoader.exists(tex_path):
+		if _base_body_texture == null:
+			_base_body_texture = player_sprite.texture
+		player_sprite.texture = load(tex_path)
+
+
 ## 动作控制器下发当前姿态通道与混合权重。
 func set_action_pose(pose: Dictionary, weight: float) -> void:
 	action_pose = pose
 	action_weight = clampf(weight, 0.0, 1.0)
+	if weight <= 0.0 and _base_body_texture and player_sprite.texture != _base_body_texture:
+		player_sprite.texture = _base_body_texture
 
 
 func tick(delta: float) -> void:

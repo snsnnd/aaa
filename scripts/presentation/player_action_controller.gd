@@ -9,6 +9,8 @@ extends RefCounted
 const BattleViewScript := preload("res://scripts/presentation/battle_view.gd")
 const PlayerPoseLibraryScript := preload("res://scripts/presentation/player_pose_library.gd")
 const ActionCatalogScript := preload("res://scripts/battle/action_catalog.gd")
+const MotionCatalogScript := preload("res://scripts/presentation/player_motion_catalog.gd")
+const FrameLibraryScript := preload("res://scripts/presentation/player_frame_library.gd")
 
 var view: BattleViewScript
 var track: Dictionary = {}
@@ -16,6 +18,9 @@ var track_time := 0.0
 var track_playing := false
 var blend_weight := 0.0
 var _fade_out := false
+var _kind := MotionCatalogScript.TRACK
+var _action_id := ""
+var _impact_time := 0.2
 
 
 func setup(v: BattleViewScript) -> void:
@@ -56,6 +61,12 @@ func on_action_started(transition: String, movement: String, vfx_tier: int, star
 	track_time = 0.0
 	track_playing = true
 	_fade_out = false
+	_kind = MotionCatalogScript.kind_for(action_id)
+	_action_id = action_id
+	_impact_time = impact_time
+	if _kind == MotionCatalogScript.SKELETAL:
+		# 骨骼资产未接入前回落 TRACK 兜底（接入后由 rig 消费骨骼剪辑）
+		_kind = MotionCatalogScript.TRACK
 	if transition == "seamless":
 		_chain_flash(vfx_tier)
 

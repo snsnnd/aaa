@@ -234,3 +234,10 @@
 - **核查结论**：玩家 = "PlayerAnim 实例 → 动态建 Sprite 节点 → load_style 加载切片图 → Action FSM 事件 + 姿态轨道逐帧驱动"；敌人 = "EnemyAnim 实例 + CharacterStateMachine 阶段状态层 + evaluator 动作曲线"，两层并存（状态机管阶段与凝滞时钟，曲线由 MOVE_ANIMATIONS evaluator 直写）。
 - **玩家 CharacterStateMachine 为死接口**（声明未实例化）：正式删除——玩家动作权威是 BattleSimulation 的 Action FSM + 姿态轨道，接入第二状态机属冗余。
 - **未来统一目标**（保留备忘）：CharacterView 实例 → CharacterPresentationProfile 装载资产（贴图/动画集/锚点）→ PresentationStateMachine / ActionPresenter 驱动；Action FSM 管"正在做什么"，Presentation SM 管"怎么表现"，两者不合并。资产形态（单图/序列帧/Skeleton2D/Spine）由 Profile 吸收，上层不变。
+
+### D36: 混合表现管线定案（用户拍板）✅
+- **分层归属**：角色实际位移 = PlayerActionController 程序驱动（永远，保证与规则时间轴同步）；常规动作（Idle/Parry/Quick Slash/Heavy Slash/Dash/Hurt）= 骨骼/切片动画；特殊动作（Perfect Contact/Finisher/Boss处决/特殊卡牌高潮）= 少量替换帧/逐帧绘制；刀光/VFX = Godot Shader/Sprite/Particle。
+- **落地**：`player_motion_catalog.gd` 按动作声明后端（TRACK/SKELETAL/FRAMES）；`player_frame_library.gd` 替换帧序列 schema（帧以命中帧为 0 对齐，只换身体贴图，根位移/灯笼仍程序驱动）；控制器按后端分发——FRAMES 时抹除程序身体通道（br/sx/sy）只留根位移；SKELETAL 资产未接入前自动回落 TRACK 兜底。
+- **回答"骨骼/切片是否必须重构"**：不需要。姿态语言已是语义通道，仅"通道→节点"的 Rig 适配层（player_rig.gd）需换实现；D35 的 CharacterView/Profile 待资产形态最终确定后再收。
+- 资产就绪后的启用路径：常规动作在 MotionCatalog 逐个切 SKELETAL + 绑定骨骼剪辑；特殊动作在 FrameLibrary 登记帧序列 + 声明 FRAMES。上层（FSM/控制器/姿态库）零改动。
+- 验证：roguelike 77/77、冒烟、三构筑、playtest 通关全过。
