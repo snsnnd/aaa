@@ -98,6 +98,9 @@ func _wire_screens() -> void:
 	shop_screen.left_shop.connect(_leave_shop)
 	pick_overlay.picked.connect(_on_pick_done)
 	pick_overlay.cancelled.connect(func(): _remove_after_pick = false)
+	over_screen.back_to_menu.connect(func():
+		GameTime.reset()
+		_enter(State.MENU))
 
 
 func _can_enter(to: State) -> bool:
