@@ -229,3 +229,8 @@
 - **灯笼二级物理**：身体水平速度驱动灯笼惯性摆动（弹簧收敛），动作甩灯通道叠加——廉价但极大提升"活"感。
 - **防反/受击轨道**：完美防反 parry_high 余韵（0.42s）/普通 0.30s；受击 hurt 踉跄轨道；动作执行中不覆盖出招姿态。
 - 验证：roguelike 77/77、冒烟、三构筑、playtest 通关全过。下一步：按《ACTION_POSE_SPEC》生图对比 → 特效与音频跟进。
+
+### D35: 角色/敌人控制链核查与死接口清理 ✅
+- **核查结论**：玩家 = "PlayerAnim 实例 → 动态建 Sprite 节点 → load_style 加载切片图 → Action FSM 事件 + 姿态轨道逐帧驱动"；敌人 = "EnemyAnim 实例 + CharacterStateMachine 阶段状态层 + evaluator 动作曲线"，两层并存（状态机管阶段与凝滞时钟，曲线由 MOVE_ANIMATIONS evaluator 直写）。
+- **玩家 CharacterStateMachine 为死接口**（声明未实例化）：正式删除——玩家动作权威是 BattleSimulation 的 Action FSM + 姿态轨道，接入第二状态机属冗余。
+- **未来统一目标**（保留备忘）：CharacterView 实例 → CharacterPresentationProfile 装载资产（贴图/动画集/锚点）→ PresentationStateMachine / ActionPresenter 驱动；Action FSM 管"正在做什么"，Presentation SM 管"怎么表现"，两者不合并。资产形态（单图/序列帧/Skeleton2D/Spine）由 Profile 吸收，上层不变。

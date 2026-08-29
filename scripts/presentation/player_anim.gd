@@ -4,7 +4,6 @@ extends Node2D
 
 const BattleSimulationScript := preload("res://scripts/battle/battle_simulation.gd")
 const FxState := preload("res://scripts/presentation/fx_state.gd")
-const CharacterStateMachineScript := preload("res://assets/game/character_showcase/scripts/character_state_machine.gd")
 const CharacterAnimProfileScript := preload("res://assets/game/character_showcase/scripts/character_anim_profile.gd")
 const PresentationCatalog := preload("res://scripts/presentation/presentation_catalog.gd")
 
@@ -14,7 +13,6 @@ var lantern_pivot: Node2D
 var lantern_sprite: Sprite2D
 var lantern_glow: Sprite2D
 var fx: FxState
-var state_machine: CharacterStateMachine
 var anim_profile: CharacterAnimProfile
 var pose_x := 0.0
 var pose_rot := 0.0
